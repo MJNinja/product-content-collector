@@ -1,5 +1,7 @@
 # Product Content Collector
 
+> **Note:** This is an initial version, built with AI-generated code (Claude) for personal use. It has not been hardened or reviewed for production use.
+
 A Chrome extension (Manifest V3, side panel) for collecting product information from existing websites into an Excel workbook, ready for WooCommerce or any other shop import.
 
 You import a workbook that holds product URLs. The extension opens each product in the current tab. You point at headings, paragraphs, lists and images on the page, type categories and other values, and export the same workbook with the configured columns filled in.
@@ -267,60 +269,8 @@ The content script is **not** registered for every website. It is injected only 
 
 ## 9. Tests performed
 
-**Unit tests:** `npm test`, 84 tests, all passing.
-
-- **Excel:** import, worksheet listing and selection, header reading (blank and duplicate headers), URL column detection by name and by content, URL validation.
-- **Export:** new and renamed columns, other sheets preserved, existing values preserved, empty values not erasing cells, `=`-prefixed text stays a string, the exported file can be re-imported, base64 round trip.
-- **Fields:** comma list parsing, the three category formatting modes, custom separators, multiple fields in one column, source field overrides, image URL columns (no alt/title columns), required fields, per-product isolation, suggested fields only mapping to existing headers.
-- **HTML:** sanitisation (scripts, handlers, styles, classes, data attributes, iframes, forms, `javascript:` links), wrapper unwrapping, capture cleaning, tag changes (H1→H3, H2→H3, DIV→P, SPAN→P, DIV with paragraphs→P, list conversions), combining, ordering, preview formatting.
-- **Storage (fake IndexedDB):** project create/list/delete with cascade, independence between projects and between products, backup/restore round trip, persistence after the database is closed and reopened, autosave debounce/flush/error handling.
-- **Extractor:** srcset parsing, lazy-image resolution, linked full-size images, absolute links, junk removal.
-- **Images:** file names (SKU default, per-product override, other column, lowercase, sanitising), `-main` / `-1, -2` suffixes, explicit image types, new-location URLs written to the spreadsheet, original URLs kept when no location is set, unique names across products, extension handling, fit-to-size without upscaling, CRC32, a ZIP that Python's `zipfile` verifies and extracts, CSV report.
-- **No `<div>` wrapper:** captured fragments of `<li>` items and edited HTML are exported exactly as typed.
-
-**End-to-end tests:** `npm run test:e2e`, 6 tests, all passing. Chromium is launched with `dist/` loaded unpacked, and a local fixture shop is used.
-
-The main workflow test covers all 20 steps of the specification:
-
-- create project
-- import the workbook, switch worksheets, pick the URL column
-- configure fields (image fields have no alt/title column options), rename a column, choose the category path format
-- open product 1 in the same tab and enter main categories and subcategories
-- select a heading through an inline span, a div through an inline link (verifying the link and its click handler did **not** fire), a nested list using ↑ and Enter, more headings and a paragraph
-- change H2 → H3 and reorder the selections
-- check the rendered and source HTML preview, including that classes, styles, scripts and screen-reader text are gone
-- capture the main image (lazy `data-srcset`) and two gallery images (thumbnail → linked full size)
-- complete the product and go to the next one, checking it starts empty
-- enter different categories for product 2
-- reload the product page while selecting and check that selection re-arms automatically
-- go back and check product 1 is intact
-- process product 3 (CSS background image; a missing required field blocks completion; SKU override) and skip it
-- open the row with an invalid URL and see the error
-- **close and reopen the panel** and check that all data is restored
-- export, then **reopen the exported .xlsx** and check every cell: other sheet kept, headers, categories, HTML, image URLs, untouched SKU/stock/supplier values, HTML stored as a string
-- backup, delete with confirmation, restore, and check the restored data
-
-Other end-to-end tests:
-
-- **Lists:** checks that "clicks build one bullet list" turns four clicks (paragraphs, a div, and a `<br>`-separated block) into one `<ul>`, and that a numbered list started from a click plus a whole container (↑) builds one `<ol>`. Then ticks three separate items and merges them into a numbered list, switches it to `<ul>` and checks the preview and the cell output. Also checks the option works on Product intro and is remembered in the Fields tab.
-
-- **Image export:** edits a description item to bare `<li>` items and checks there is no `<div>` in the panel or the export. Captures a main image (SVG) and gallery images, including a pasted 2400×1600 transparent PNG with `?sw=3000` and a broken URL. Sets a custom file name for product 2, a new image location, JPG, max 600 px and lowercase names. Then:
-  - collapses and expands the Fields tab sections, checking the summaries and that the collapsed state is kept when switching tabs; Cell formatting starts collapsed
-  - checks that the image settings are no longer on the Export tab
-  - exports a plain .xlsx
-  - exports the ZIP, unzips it and checks the file list
-  - decodes the JPGs (2400×1600 → 600×400; 400×300 not upscaled)
-  - checks the report and the 404 failure message
-  - checks that the workbook in the ZIP has the new URLs
-
-- A second client structure: different headers, URL column detected from content, a separate subcategory column, a custom manual field in a new column, exported and verified.
-- A restricted page (`chrome://version`) shows a clear error.
-- The extension loads, the side panel path is set, and the toolbar icon is configured to open the panel.
-
-Two bugs found by these tests were fixed:
-
-- Auto-ending selection on a single-value field could cancel the next field's selection.
-- The source view did not indent nested lists.
+- **Unit tests:** `npm test` — 84 tests covering Excel import/export, field and category configuration, HTML sanitisation, IndexedDB storage (including backup/restore), lazy-image extraction, and image file naming, resizing and ZIP packaging.
+- **End-to-end tests:** `npm run test:e2e` — 6 Playwright tests, run against the real unpacked extension with a local fixture shop, covering the full collect → configure → export workflow, list-building from selections, and image export (resize, convert, ZIP).
 
 ## 10. Known limitations and items to verify manually
 
@@ -334,5 +284,4 @@ Two bugs found by these tests were fixed:
 - Product data is matched to spreadsheet rows by row number. Do not insert or delete rows in the source workbook mid-project; re-import if you must.
 - Image download fetches each image once per export; sites that block automated image requests (hotlink protection, login) show up as failures in the report. Very large exports (thousands of images) are built in memory, which can take a while.
 - Animated GIFs become a single still frame when converted. Use *Keep original file* if you need the animation.
-- Description items saved *before* this update that already contain a `<div>` around list items keep it until you edit them once (✎), or change the output tag to *remove wrapper* or `<ul>`.
 - If the side panel is closed while you are in selection mode, selection mode stays active on the page until you press Esc or click Done.

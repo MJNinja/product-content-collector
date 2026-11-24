@@ -1,0 +1,8 @@
+.claude/
+dist/
+node_modules/
+test-results/
+playwright-report/
+tests/fixtures/*.xlsx
+tests/e2e/output/
+tests/fixtures/pages/img/big-front.png

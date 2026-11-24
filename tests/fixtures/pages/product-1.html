@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>UltraView 55" 4K Smart TV</title>
+<style>
+  body { font-family: sans-serif; margin: 0; } header, footer { background: #222; color: #fff; padding: 10px; }
+  .wrap { display: flex; gap: 24px; padding: 20px; } .gallery { width: 420px; } .thumbs { display: flex; gap: 6px; }
+  .thumbs img { width: 120px; height: 90px; } .info { flex: 1; } .hidden-msg { display: none; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+<script>window.__linkClicks = 0;</script>
+</head><body>
+<header><a href="/" id="home-link">Shop</a> › TVs</header>
+<div class="wrap">
+  <div class="gallery">
+    <img id="main-image" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="/img/tv1-main.svg"
+         data-srcset="/img/tv1-main.svg 800w, /img/small.svg 200w" alt="UltraView 55 front" title="UltraView front view" width="400" height="300">
+    <div class="thumbs">
+      <a href="/img/tv1-g1.svg" class="thumb" id="thumb-1" onclick="window.__linkClicks++; return false;"><img src="/img/tv1-g1.svg" alt="Side view"></a>
+      <a href="/img/tv1-g2.svg" class="thumb" id="thumb-2"><img srcset="/img/tv1-g2.svg 2x" src="/img/small.svg" alt="Back panel"></a>
+    </div>
+  </div>
+  <div class="info">
+    <h1 class="product_title entry-title" id="title" style="color:#123">UltraView <span class="model">55"</span> 4K Smart TV</h1>
+    <p class="price">€ 699,00</p>
+    <button id="add-to-cart" onclick="window.__cart = true">Add to cart</button>
+    <div class="woocommerce-tabs">
+      <h2 id="features-heading" class="tab-title">Product Features</h2>
+      <div id="intro" class="intro-text" data-tracking="xyz" onclick="window.__introClicked = true">
+        Experience <strong>stunning 4K</strong> clarity with <em>HDR10+</em> and a <a href="/hdr" id="hdr-link" onclick="window.__linkClicks++">vivid</a> colour engine.
+        <span class="sr-only">Screen reader only text</span>
+      </div>
+      <h2 id="specs-heading">Technical Specifications</h2>
+      <ul id="specs" class="spec-list">
+        <li><b>Screen:</b> 55 inch</li>
+        <li><b>Resolution:</b> 3840 × 2160
+          <ul id="nested"><li>HDR10+</li><li>Dolby Vision</li></ul>
+        </li>
+        <li style="display:none"></li>
+        <li><b>Smart platform:</b> OpenOS</li>
+      </ul>
+      <h3 id="warranty-heading">Warranty Information</h3>
+      <p id="warranty" class="small-print">Two years <i>manufacturer</i> warranty.<script>window.__evil = 1;</script></p>
+      <div class="hidden-msg">Hidden promo</div>
+      <div id="highlights" class="highlights"><p class="hl">7.2 channels</p><p class="hl">95 watts per channel</p><div class="hl"><span>8K Ultra HD</span></div></div>
+      <p id="lines">3D Audio<br>Powered by <b>HEOS™</b><br>6 HDMI inputs</p>
+    </div>
+  </div>
+</div>
+<footer>Footer links</footer>
+</body></html>

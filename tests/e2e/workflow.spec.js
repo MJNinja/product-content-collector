@@ -69,12 +69,28 @@ test('complete workflow: import → configure → collect → navigate → reope
   // Categories: WooCommerce-style hierarchical paths.
   const catFormat = panel.getByTestId('format-row').filter({ hasText: 'Main categories + Subcategories' });
   await catFormat.getByTestId('format-mode').selectOption('prefix');
+  // Product identifier for the "jump to product" list: automatic picks SKU.
+  const labelCol = panel.getByTestId('label-column');
+  await expect(labelCol.locator('option').first()).toHaveText('Automatic (SKU)');
+  await labelCol.selectOption('c2');
   await waitSaved(panel);
   await shot('2-fields');
   await panel.getByTestId('go-collect').click();
+  const jumpOptions = panel.getByTestId('product-jump').locator('option');
+  await expect(jumpOptions.nth(1)).toHaveText('2. Existing category – Pending');
+  await expect(jumpOptions.nth(0)).toHaveText(`1. ${SITE}/product-1.html – Pending`); // empty → URL
+  await panel.getByTestId('tab-fields').click();
+  await panel.getByTestId('label-column').selectOption('__auto__');
+  await panel.getByTestId('tab-collect').click();
+  await expect(jumpOptions.nth(0)).toHaveText('1. TV001 – Pending');
+  await expect(jumpOptions.nth(1)).toHaveText('2. TV002 – Pending');
 
   // 4. Open first product in the same tab
   await expect(panel.getByTestId('product-counter')).toHaveText('Product 1 of 4');
+  // The status badge sits below the counter.
+  const counterBox = await panel.getByTestId('product-counter').boundingBox();
+  const badgeBox = await panel.locator('.counter-block').getByTestId('status-badge').boundingBox();
+  expect(badgeBox.y).toBeGreaterThanOrEqual(counterBox.y + counterBox.height - 1);
   await panel.getByTestId('open').click();
   await page.waitForURL(`${SITE}/product-1.html`);
 

@@ -1,15 +1,8 @@
 import { useMemo, useState } from 'react';
-import { computeRow, missingRequired, columnName, oversizedCells, planProductImages, autoImageBaseName } from '../../services/fieldService.js';
+import { computeRow, productLabel, missingRequired, columnName, oversizedCells, planProductImages, autoImageBaseName } from '../../services/fieldService.js';
 import { sameDocument } from '../../utils/url.js';
 import { StatusBadge, STATUS_LABELS, countStatuses, ProgressBar } from './common.jsx';
 import { FieldEditor } from './FieldEditors.jsx';
-
-function productLabel(project, product) {
-  // Prefer the first non-URL value of the row (often a SKU or name) as a label.
-  const urlCol = project.columns.find((c) => c.key === project.urlColumnKey);
-  const firstCol = project.columns.find((c) => c.index != null && c !== urlCol && product.source && product.source[c.index]);
-  return firstCol ? String(product.source[firstCol.index]) : product.url || `Row ${product.rowIndex + 1}`;
-}
 
 function RowPreview({ project, product }) {
   const row = useMemo(() => computeRow(project, product), [project, product]);
@@ -86,10 +79,10 @@ export default function CollectView({ ctx }) {
     <div className="view collect-view">
       <section className="card product-nav">
         <div className="row space">
-          <div>
+          <div className="counter-block">
             <span className="counter" data-testid="product-counter">
               Product {currentIndex + 1} of {products.length}
-            </span>{' '}
+            </span>
             <StatusBadge status={product.status} />
           </div>
           <select

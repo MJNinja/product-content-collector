@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseList, computeRow, fieldValues, missingRequired, createField, suggestFields, decodeSeparator, createPresetField, PRESET_LABELS } from '../../src/services/fieldService.js';
+import { parseList, computeRow, fieldValues, missingRequired, createField, suggestFields, decodeSeparator, createPresetField, PRESET_LABELS, labelColumn, productLabel } from '../../src/services/fieldService.js';
 import { cleanCapturedHtml } from '../../src/services/htmlService.js';
 
 function project(fields, columnFormats = {}) {
@@ -163,5 +163,36 @@ describe('Product intro field', () => {
     const f = createPresetField('Product intro', cols, 'c1');
     expect(f).toMatchObject({ label: 'Product intro', kind: 'html', columnKey: 'c2' });
     expect(createPresetField('Product intro', cols.filter((c) => c.key !== 'c2'), 'c1').columnKey).toBe(null);
+  });
+});
+
+describe('product identifier (Collect tab list)', () => {
+  const cols = [
+    { key: 'c0', name: 'Category', index: 0 },
+    { key: 'c1', name: 'URL', index: 1 },
+    { key: 'c2', name: 'Name', index: 2 },
+    { key: 'c3', name: 'SKU', index: 3 },
+    { key: 'n1', name: 'New', index: null },
+  ];
+  const proj = (labelColumnKey) => ({ columns: cols, urlColumnKey: 'c1', labelColumnKey });
+  const prod = { rowIndex: 4, url: 'https://x.test/p', source: { 0: 'PA Equipment', 1: 'https://x.test/p', 2: 'Mixer 8', 3: 'A8-2U' } };
+
+  it('automatic: SKU-like column, then name/title, then first non-URL column', () => {
+    expect(labelColumn(proj(undefined)).key).toBe('c3');
+    expect(productLabel(proj(null), prod)).toBe('A8-2U');
+    expect(labelColumn({ ...proj(), columns: cols.filter((c) => c.key !== 'c3') }).key).toBe('c2');
+    expect(labelColumn({ ...proj(), columns: cols.filter((c) => !['c2', 'c3'].includes(c.key)) }).key).toBe('c0');
+  });
+  it('uses the chosen column for every product', () => {
+    expect(productLabel(proj('c2'), prod)).toBe('Mixer 8');
+    expect(productLabel(proj('c0'), prod)).toBe('PA Equipment');
+  });
+  it('falls back to the URL, then the row, when the value is empty or none is chosen', () => {
+    expect(productLabel(proj(''), prod)).toBe('https://x.test/p');
+    expect(productLabel(proj('c2'), { rowIndex: 4, url: 'https://x.test/q', source: {} })).toBe('https://x.test/q');
+    expect(productLabel(proj('c2'), { rowIndex: 4, url: '', source: {} })).toBe('Row 5');
+  });
+  it('a column that no longer exists falls back to automatic', () => {
+    expect(labelColumn(proj('c9')).key).toBe('c3');
   });
 });

@@ -72,6 +72,8 @@ Notes:
 
 The Fields tab has four sections: **Columns**, **Fields**, **Image settings** and **Cell formatting**. Click a section's title to collapse it to a one-line summary (for example "7 fields: SKU, Product title, …"). Click it again to expand it. **Cell formatting** starts collapsed; the others start open. The panel remembers which sections you collapsed or expanded.
 
+In **Columns** you can also change the **Product URL column** and choose the **Product identifier**: the column whose value names each product in the Collect tab's jump-to-product list (for example the SKU or product name). *Automatic* uses a SKU-like column, else a name/title column. *None* shows the URL.
+
 ### Columns
 
 - Rename any column. The new name is written to the header cell on export.
@@ -117,7 +119,7 @@ Category relationships are never guessed. The path is built only from what you t
 
 ## 5. Collecting product information (Collect tab)
 
-- The top of the tab shows **Product N of M**, the status (*Pending / In progress / Completed / Skipped*), the URL, and a dropdown to jump to any product.
+- The top of the tab shows **Product N of M** with the status (*Pending / In progress / Completed / Skipped*) below it, the URL, and a dropdown to jump to any product. The dropdown names each product by the **Product identifier** column chosen in Fields → Columns (automatic: a SKU-like column, else a name/title column). When that cell is empty, the product URL is shown.
 - **Open** loads the product in the current tab. **Previous / Next** save and navigate. **Skip** marks the product as skipped and moves on.
 - **Mark completed / Complete & next** checks required fields first.
 - If the tab shows a different page than the product URL, a warning appears. Captures still go to the current product.
@@ -269,7 +271,7 @@ The content script is **not** registered for every website. It is injected only 
 
 ## 9. Tests performed
 
-- **Unit tests:** `npm test` — 84 tests covering Excel import/export, field and category configuration, HTML sanitisation, IndexedDB storage (including backup/restore), lazy-image extraction, and image file naming, resizing and ZIP packaging.
+- **Unit tests:** `npm test` — 88 tests covering Excel import/export, field and category configuration, HTML sanitisation, IndexedDB storage (including backup/restore), lazy-image extraction, and image file naming, resizing and ZIP packaging.
 - **End-to-end tests:** `npm run test:e2e` — 6 Playwright tests, run against the real unpacked extension with a local fixture shop, covering the full collect → configure → export workflow, list-building from selections, and image export (resize, convert, ZIP).
 
 ## 10. Known limitations and items to verify manually

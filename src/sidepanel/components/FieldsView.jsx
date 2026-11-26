@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  METHODS, KINDS, createField, createPresetField, PRESET_LABELS, imageRole, defaultSeparator, defaultColumnFormat, computeRow, encodeSeparator, decodeSeparator, suggestFields,
+  METHODS, KINDS, createField, createPresetField, PRESET_LABELS, imageRole, defaultSeparator, defaultColumnFormat, computeRow, encodeSeparator, decodeSeparator, suggestFields, labelColumn, productLabel,
 } from '../../services/fieldService.js';
 import { newColumn } from '../../services/excelService.js';
 import { normalizeProductUrl } from '../../utils/url.js';
@@ -203,6 +203,8 @@ export default function FieldsView({ ctx }) {
     return map;
   }, [fields]);
 
+  const autoLabel = labelColumn({ ...project, labelColumnKey: null });
+
   const preview = useMemo(() => (product ? computeRow(project, product) : {}), [project, product]);
 
   const setFormat = (key, patch) =>
@@ -223,6 +225,21 @@ export default function FieldsView({ ctx }) {
             ))}
           </select>
         </label>
+        <label className="inline-label">
+          Product identifier
+          <select
+            value={project.labelColumnKey == null ? '__auto__' : project.labelColumnKey}
+            onChange={(e) => updateProject({ labelColumnKey: e.target.value === '__auto__' ? null : e.target.value })}
+            data-testid="label-column"
+          >
+            <option value="__auto__">Automatic{autoLabel ? ` (${autoLabel.name})` : ''}</option>
+            {project.columns.filter((c) => c.index != null && c.key !== project.urlColumnKey).map((c) => (
+              <option key={c.key} value={c.key}>{c.name}</option>
+            ))}
+            <option value="">None (show the URL)</option>
+          </select>
+        </label>
+        <p className="muted small hint">Shown in the Collect tab's "jump to product" list, e.g. "5. {product ? productLabel(project, product).slice(0, 40) : 'TV001'}".</p>
         <ul className="column-list">
           {project.columns.map((c) => (
             <li key={c.key} data-testid="column-item">

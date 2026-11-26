@@ -153,6 +153,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-si
 .footer-actions { display: flex; justify-content: flex-end; }
 
 .product-nav .counter { font-weight: 600; }
+.counter-block { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 .jump { width: auto; max-width: 55%; font-size: 12px; }
 .product-url { margin: 4px 0 8px; word-break: break-all; font-size: 12px; }
 .product-url a { color: var(--accent); }

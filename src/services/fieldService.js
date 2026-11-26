@@ -282,6 +282,33 @@ export function defaultImageSettings() {
   };
 }
 
+/**
+ * Column used to identify products in the Collect tab's product list.
+ * project.labelColumnKey: undefined/null = automatic (a SKU-like column, else a
+ * name/title column, else the first non-URL column), '' = none (URL / row only).
+ */
+export function labelColumn(project) {
+  const cols = ((project && project.columns) || []).filter((c) => c.index != null && c.key !== project.urlColumnKey);
+  const key = project && project.labelColumnKey;
+  if (key === '') return null;
+  const chosen = key != null ? cols.find((c) => c.key === key) : null;
+  if (chosen) return chosen; // a column that no longer exists falls back to automatic
+  return (
+    cols.find((c) => /^(sku|article|item\s*(no|code)|product\s*code|code)\b/i.test(c.name)) ||
+    cols.find((c) => /^(product\s*)?(name|title)$/i.test(c.name)) ||
+    cols[0] ||
+    null
+  );
+}
+
+/** Short text identifying a product (value of the identifier column, else its URL, else its row). */
+export function productLabel(project, product) {
+  const col = labelColumn(project);
+  const v = col && product.source ? product.source[col.index] : null;
+  if (v != null && String(v).trim()) return String(v).trim();
+  return product.url || `Row ${product.rowIndex + 1}`;
+}
+
 export function imageSettings(project) {
   const st = { ...defaultImageSettings(), ...((project && project.imageSettings) || {}) };
   if (st.nameColumnKey === undefined || st.nameColumnKey === null) {

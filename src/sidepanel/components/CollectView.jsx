@@ -4,6 +4,14 @@ import { sameDocument } from '../../utils/url.js';
 import { StatusBadge, STATUS_LABELS, countStatuses, ProgressBar } from './common.jsx';
 import { FieldEditor } from './FieldEditors.jsx';
 
+const PREVIEW_MAX_CHARACTERS = 600;
+
+/** Long cell values are shortened in the preview. */
+function shorten(text) {
+  return text.length > PREVIEW_MAX_CHARACTERS ? `${text.slice(0, PREVIEW_MAX_CHARACTERS)}…` : text;
+}
+
+/** Table of what will be written to each column for this product. */
 function RowPreview({ project, product }) {
   const row = useMemo(() => computeRow(project, product), [project, product]);
   const entries = Object.entries(row);
@@ -11,11 +19,12 @@ function RowPreview({ project, product }) {
   return (
     <table className="row-preview" data-testid="row-preview">
       <tbody>
-        {entries.map(([key, cell]) => (
-          <tr key={key} data-column={columnName(project, key)}>
-            <th>{columnName(project, key)}</th>
+        {entries.map(([columnKey, cell]) => (
+          <tr key={columnKey} data-column={columnName(project, columnKey)}>
+            <th>{columnName(project, columnKey)}</th>
             <td>
-              {cell.value ? <pre>{cell.value.length > 600 ? `${cell.value.slice(0, 600)}…` : cell.value}</pre> : <span className="muted">(empty – existing cell kept)</span>}
+              {cell.value && <pre>{shorten(cell.value)}</pre>}
+              {!cell.value && <span className="muted">(empty – existing cell kept)</span>}
               {!cell.write && cell.value && <span className="muted small"> · unchanged from spreadsheet</span>}
             </td>
           </tr>
@@ -25,38 +34,43 @@ function RowPreview({ project, product }) {
   );
 }
 
+/** File name input and the resulting image file names for this product. */
 function ImageFiles({ project, product, onChange }) {
-  const plan = useMemo(() => planProductImages(project, product), [project, product]);
-  const auto = autoImageBaseName(project, product);
+  const plannedFiles = useMemo(() => planProductImages(project, product), [project, product]);
+  const automaticName = autoImageBaseName(project, product);
   return (
     <section className="card image-files" data-testid="image-files">
       <label className="inline-label">
         Image file name
         <input
           value={product.imageName || ''}
-          placeholder={auto}
-          onChange={(e) => onChange(e.target.value)}
+          placeholder={automaticName}
+          onChange={(event) => onChange(event.target.value)}
           data-testid="image-name"
         />
       </label>
-      {plan.length > 0 ? (
+      {plannedFiles.length > 0 ? (
         <ul className="plain-list small" data-testid="image-file-list">
-          {plan.map((e) => (
-            <li key={`${e.fieldId}:${e.imageId}`}>
-              <code>{e.fileName}</code>
-              {e.publicUrl && <span className="muted"> → {e.publicUrl}</span>}
+          {plannedFiles.map((file) => (
+            <li key={`${file.fieldId}:${file.imageId}`}>
+              <code>{file.fileName}</code>
+              {file.publicUrl && <span className="muted"> → {file.publicUrl}</span>}
             </li>
           ))}
         </ul>
       ) : (
-        <p className="muted small">Leave empty to use “{auto}”. Main image gets “-main”, gallery images “-1”, “-2”…</p>
+        <p className="muted small">Leave empty to use “{automaticName}”. Main image gets “-main”, gallery images “-1”, “-2”…</p>
       )}
     </section>
   );
 }
 
+/** Collect tab: product navigation, the field editors and the output preview. */
 export default function CollectView({ ctx }) {
-  const { project, products, currentIndex, tab, selecting, updateField, setFieldData, toggleSelect, goTo, openInTab, completeCurrent, updateProduct, setView } = ctx;
+  const {
+    project, products, currentIndex, tab, selecting,
+    updateField, setFieldData, toggleSelect, goTo, openInTab, completeCurrent, updateProduct, setView,
+  } = ctx;
   const [showPreview, setShowPreview] = useState(true);
   const counts = useMemo(() => countStatuses(products), [products]);
 
@@ -73,6 +87,9 @@ export default function CollectView({ ctx }) {
   const product = products[currentIndex];
   const missing = missingRequired(project, product);
   const oversized = oversizedCells(project, product);
+  const isLastProduct = currentIndex >= products.length - 1;
+  const hasImageFields = project.fields.some((field) => field.kind === 'image' && field.method === 'visual');
+  // The browser tab shows another page than this product's (e.g. the user clicked a link).
   const tabMismatch = tab && product.url && tab.url && !sameDocument(tab.url, product.url);
 
   return (
@@ -88,13 +105,13 @@ export default function CollectView({ ctx }) {
           <select
             className="jump"
             value={currentIndex}
-            onChange={(e) => goTo(Number(e.target.value))}
+            onChange={(event) => goTo(Number(event.target.value))}
             aria-label="Jump to product"
             data-testid="product-jump"
           >
-            {products.map((p, i) => (
-              <option key={p.rowIndex} value={i}>
-                {i + 1}. {productLabel(project, p).slice(0, 40)} – {STATUS_LABELS[p.status]}
+            {products.map((item, index) => (
+              <option key={item.rowIndex} value={index}>
+                {index + 1}. {productLabel(project, item).slice(0, 40)} – {STATUS_LABELS[item.status]}
               </option>
             ))}
           </select>
@@ -102,7 +119,16 @@ export default function CollectView({ ctx }) {
         <ProgressBar counts={counts} />
         <div className="product-url" data-testid="product-url">
           {product.url ? (
-            <a href={product.url} onClick={(e) => { e.preventDefault(); openInTab(product); }} title="Open in the current tab">{product.url}</a>
+            <a
+              href={product.url}
+              onClick={(event) => {
+                event.preventDefault();
+                openInTab(product);
+              }}
+              title="Open in the current tab"
+            >
+              {product.url}
+            </a>
           ) : (
             <span className="warn">No valid URL in row {product.rowIndex + 1}{product.rawUrl ? ` ("${product.rawUrl}")` : ''}</span>
           )}
@@ -117,7 +143,7 @@ export default function CollectView({ ctx }) {
           <button className="btn" disabled={currentIndex === 0} onClick={() => goTo(currentIndex - 1)} data-testid="prev">← Previous</button>
           <button className="btn" onClick={() => openInTab(product)} disabled={!product.url} data-testid="open">Open</button>
           <button className="btn" onClick={() => goTo(currentIndex + 1, { statusForCurrent: 'skipped' })} data-testid="skip">Skip</button>
-          <button className="btn" disabled={currentIndex >= products.length - 1} onClick={() => goTo(currentIndex + 1)} data-testid="next">Next →</button>
+          <button className="btn" disabled={isLastProduct} onClick={() => goTo(currentIndex + 1)} data-testid="next">Next →</button>
         </div>
       </section>
 
@@ -127,22 +153,22 @@ export default function CollectView({ ctx }) {
             No fields configured. <button className="link-btn" onClick={() => setView('fields')}>Configure fields</button>
           </p>
         )}
-        {project.fields.map((f) => (
+        {project.fields.map((field) => (
           <FieldEditor
-            key={`${product.rowIndex}:${f.id}`}
+            key={`${product.rowIndex}:${field.id}`}
             project={project}
-            field={f}
+            field={field}
             product={product}
-            onChange={(v) => setFieldData(currentIndex, f.id, v)}
+            onChange={(value) => setFieldData(currentIndex, field.id, value)}
             selecting={selecting}
             onToggleSelect={toggleSelect}
-            onFieldChange={(patch) => updateField(f.id, patch)}
+            onFieldChange={(changes) => updateField(field.id, changes)}
           />
         ))}
       </section>
 
-      {project.fields.some((f) => f.kind === 'image' && f.method === 'visual') && (
-        <ImageFiles project={project} product={product} onChange={(v) => updateProduct(currentIndex, { imageName: v })} />
+      {hasImageFields && (
+        <ImageFiles project={project} product={product} onChange={(imageName) => updateProduct(currentIndex, { imageName })} />
       )}
 
       <section className="card">
@@ -159,8 +185,13 @@ export default function CollectView({ ctx }) {
           ) : (
             <button className="btn" onClick={() => completeCurrent(false)} data-testid="complete">Mark completed</button>
           )}
-          <button className="btn primary grow" onClick={() => completeCurrent(true)} disabled={currentIndex >= products.length - 1 && product.status === 'completed'} data-testid="complete-next">
-            {currentIndex >= products.length - 1 ? 'Complete' : 'Complete & next →'}
+          <button
+            className="btn primary grow"
+            onClick={() => completeCurrent(true)}
+            disabled={isLastProduct && product.status === 'completed'}
+            data-testid="complete-next"
+          >
+            {isLastProduct ? 'Complete' : 'Complete & next →'}
           </button>
         </div>
       </section>

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 
+/** Message bar at the top. Info and success messages disappear after 4 seconds; errors stay. */
 export function Banner({ message, onClose }) {
   useEffect(() => {
     if (message.type === 'error') return undefined;
-    const t = setTimeout(onClose, 4000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(onClose, 4000);
+    return () => clearTimeout(timer);
   }, [message, onClose]);
   return (
     <div className={`banner ${message.type}`} role={message.type === 'error' ? 'alert' : 'status'} data-testid="banner">
@@ -21,7 +22,16 @@ export function ConfirmButton({ children, confirmText = 'Are you sure?', onConfi
     return (
       <span className="confirm" data-testid={testId ? `${testId}-confirm` : undefined}>
         <span>{confirmText}</span>
-        <button className="btn danger small" onClick={() => { setAsking(false); onConfirm(); }} data-testid={testId ? `${testId}-yes` : undefined}>Yes</button>
+        <button
+          className="btn danger small"
+          onClick={() => {
+            setAsking(false);
+            onConfirm();
+          }}
+          data-testid={testId ? `${testId}-yes` : undefined}
+        >
+          Yes
+        </button>
         <button className="btn small" onClick={() => setAsking(false)}>Cancel</button>
       </span>
     );
@@ -40,33 +50,36 @@ export function StatusBadge({ status }) {
   return <span className={`status ${status}`} data-testid="status-badge">{STATUS_LABELS[status] || status}</span>;
 }
 
+/** Coloured bar: completed, skipped and in-progress products as parts of the total. */
 export function ProgressBar({ counts }) {
   const total = counts.total || 0;
-  const pct = (n) => (total ? `${(n / total) * 100}%` : '0%');
+  const widthFor = (count) => (total ? `${(count / total) * 100}%` : '0%');
   return (
     <div className="progress" title={`${counts.completed || 0} completed, ${counts.skipped || 0} skipped of ${total}`}>
-      <span className="seg completed" style={{ width: pct(counts.completed || 0) }} />
-      <span className="seg skipped" style={{ width: pct(counts.skipped || 0) }} />
-      <span className="seg in_progress" style={{ width: pct(counts.in_progress || 0) }} />
+      <span className="seg completed" style={{ width: widthFor(counts.completed || 0) }} />
+      <span className="seg skipped" style={{ width: widthFor(counts.skipped || 0) }} />
+      <span className="seg in_progress" style={{ width: widthFor(counts.in_progress || 0) }} />
     </div>
   );
 }
 
+/** Number of products per status, plus the total. */
 export function countStatuses(products) {
-  const c = { total: products.length, pending: 0, in_progress: 0, completed: 0, skipped: 0 };
-  for (const p of products) c[p.status] = (c[p.status] || 0) + 1;
-  return c;
+  const counts = { total: products.length, pending: 0, in_progress: 0, completed: 0, skipped: 0 };
+  for (const product of products) counts[product.status] = (counts[product.status] || 0) + 1;
+  return counts;
 }
 
+/** Makes the browser download data as a file (through a temporary link). */
 export function downloadBytes(bytes, fileName, mime) {
   const blob = bytes instanceof Blob ? bytes : new Blob([bytes], { type: mime });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
@@ -80,8 +93,8 @@ export function safeFileName(name) {
 
 function readCollapsed(id, fallback) {
   try {
-    const v = localStorage.getItem(`pcc:collapsed:${id}`);
-    return v == null ? fallback : v === '1';
+    const stored = localStorage.getItem(`pcc:collapsed:${id}`);
+    return stored == null ? fallback : stored === '1';
   } catch {
     return fallback;
   }

@@ -1,217 +1,96 @@
 import { useMemo, useState } from 'react';
-import {
-  METHODS, KINDS, createField, createPresetField, PRESET_LABELS, imageRole, defaultSeparator, defaultColumnFormat, computeRow, encodeSeparator, decodeSeparator, suggestFields, labelColumn, productLabel,
-} from '../../services/fieldService.js';
+import { createField, createPresetField, PRESET_LABELS, computeRow, suggestFields, labelColumn, productLabel } from '../../services/fieldService.js';
 import { newColumn } from '../../services/excelService.js';
 import { normalizeProductUrl } from '../../utils/url.js';
 import { moveItem } from '../../services/htmlService.js';
-import { ConfirmButton, CollapsibleCard } from './common.jsx';
+import { CollapsibleCard } from './common.jsx';
 import ImageSettings from './ImageSettings.jsx';
-import { CAPTURE_MODES } from './FieldEditors.jsx';
+import FieldCard from './FieldCard.jsx';
+import CellFormatting from './CellFormatting.jsx';
 
-/** Column dropdown that also lets the user create a new column inline. */
-function ColumnSelect({ project, value, onChange, onCreate, allowNone = true, testId, excludeUrl = true }) {
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState('');
-  if (adding) {
-    const submit = () => {
-      const n = name.trim();
-      if (n) onCreate(n);
-      setAdding(false);
-      setName('');
-    };
-    return (
-      <span className="row">
-        <input
-          autoFocus
-          className="grow"
-          placeholder="New column name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); submit(); }
-            if (e.key === 'Escape') setAdding(false);
-          }}
-          data-testid={testId ? `${testId}-new-name` : undefined}
-        />
-        <button className="btn small primary" onClick={submit} type="button" data-testid={testId ? `${testId}-new-ok` : undefined}>Add</button>
-      </span>
-    );
-  }
-  return (
-    <select
-      value={value || ''}
-      onChange={(e) => (e.target.value === '__new__' ? setAdding(true) : onChange(e.target.value || null))}
-      data-testid={testId}
-    >
-      {allowNone && <option value="">— not exported —</option>}
-      {project.columns
-        .filter((c) => !excludeUrl || c.key !== project.urlColumnKey)
-        .map((c) => (
-          <option key={c.key} value={c.key}>
-            {c.name}{c.index == null ? ' (new)' : ''}
-          </option>
-        ))}
-      <option value="__new__">+ New column…</option>
-    </select>
-  );
+const AUTOMATIC = '__auto__';
+
+/** "was "Name"", "new column" or "existing" next to a column in the list. */
+function columnOrigin(column) {
+  if (column.index == null) return 'new column';
+  if (column.originalName !== column.name) return `was "${column.originalName}"`;
+  return 'existing';
 }
 
-function FieldCard({ project, field, index, count, update, remove, move, addColumn }) {
-  const kinds = KINDS[field.method] || KINDS.manual;
-  const set = (patch) => update({ ...field, ...patch });
-  const setMethod = (method) => {
-    const allowed = KINDS[method].map((k) => k.value);
-    const kind = allowed.includes(field.kind) ? field.kind : allowed[0];
-    set({ method, kind, separator: kind === field.kind ? field.separator : defaultSeparator(kind) });
-  };
-  const setKind = (kind) => set({ kind, separator: defaultSeparator(kind), multiple: kind === 'list' ? true : field.multiple });
-  const multipleRelevant = !(field.method === 'source') && !(field.method === 'manual' && field.kind !== 'list');
-
-  return (
-    <li className="field-card" data-testid="field-card">
-      <div className="field-head">
-        <input
-          className="field-label grow"
-          value={field.label}
-          onChange={(e) => set({ label: e.target.value })}
-          aria-label="Field name"
-          data-testid="field-label"
-        />
-        <button className="icon-btn" disabled={index === 0} onClick={() => move(index, index - 1)} title="Move up">↑</button>
-        <button className="icon-btn" disabled={index === count - 1} onClick={() => move(index, index + 1)} title="Move down">↓</button>
-        <ConfirmButton className="icon-btn" confirmText="Remove field?" onConfirm={remove}>✕</ConfirmButton>
-      </div>
-      <div className="form-grid">
-        <label>
-          Capture method
-          <select value={field.method} onChange={(e) => setMethod(e.target.value)} data-testid="field-method">
-            {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-          </select>
-        </label>
-        <label>
-          Content type
-          <select value={field.kind} onChange={(e) => setKind(e.target.value)} disabled={kinds.length < 2} data-testid="field-kind">
-            {kinds.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
-          </select>
-        </label>
-        <label className="span2">
-          {field.method === 'source' ? 'Spreadsheet column' : field.kind === 'image' ? 'Image URL column' : 'Destination column'}
-          <ColumnSelect project={project} value={field.columnKey} onChange={(columnKey) => set({ columnKey })} onCreate={(n) => set({ columnKey: addColumn(n) })} testId="field-column" />
-        </label>
-        {field.kind === 'image' && (
-          <label className="span2">
-            Image type (file name suffix)
-              <select value={imageRole(field)} onChange={(e) => set({ imageRole: e.target.value })} data-testid="field-image-role">
-                <option value="main">Main image (name-main)</option>
-                <option value="gallery">Gallery (name-1, name-2, …)</option>
-              </select>
-            </label>
-        )}
-        {field.method === 'visual' && field.kind === 'html' && (
-          <label className="span2">
-            Clicks on the page
-            <select value={field.captureAs || 'items'} onChange={(e) => set({ captureAs: e.target.value })} data-testid="field-capture-mode">
-              {CAPTURE_MODES.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label>
-          Join multiple values with
-          <input
-            value={encodeSeparator(field.separator)}
-            onChange={(e) => set({ separator: decodeSeparator(e.target.value) })}
-            placeholder="e.g. , or \n"
-            data-testid="field-separator"
-          />
-        </label>
-        <div className="checks">
-          {multipleRelevant && (
-            <label className="check">
-              <input type="checkbox" checked={!!field.multiple} onChange={(e) => set({ multiple: e.target.checked })} data-testid="field-multiple" />
-              Multiple values
-            </label>
-          )}
-          <label className="check">
-            <input type="checkbox" checked={!!field.required} onChange={(e) => set({ required: e.target.checked })} data-testid="field-required" />
-            Required
-          </label>
-        </div>
-      </div>
-      {!field.columnKey && <p className="warn small">Not mapped to a column – this field will not be exported.</p>}
-      {field.method === 'source' && <p className="muted small">Shows the value already in the spreadsheet. It is only written if you override it for a product.</p>}
-    </li>
-  );
-}
-
+/**
+ * Fields tab: four collapsible sections – Columns, Fields, Image settings and
+ * Cell formatting. Every change is saved through updateProject (autosave).
+ */
 export default function FieldsView({ ctx }) {
   const { project, products, currentIndex, updateProject, setProducts, setView, saver } = ctx;
-  const [newColName, setNewColName] = useState('');
+  const [newColumnName, setNewColumnName] = useState('');
   const fields = project.fields || [];
   const product = products[currentIndex];
 
+  /** Adds a column (or reuses one with the same name) and returns its key. */
   const addColumn = (name) => {
-    const existing = project.columns.find((c) => c.name.toLowerCase() === name.toLowerCase());
+    const existing = project.columns.find((column) => column.name.toLowerCase() === name.toLowerCase());
     if (existing) return existing.key;
-    const col = newColumn(name);
-    updateProject((p) => ({ ...p, columns: [...p.columns, col] }));
-    return col.key;
+    const column = newColumn(name);
+    updateProject((current) => ({ ...current, columns: [...current.columns, column] }));
+    return column.key;
   };
 
-  const updateField = (i, f) => updateProject((p) => ({ ...p, fields: p.fields.map((x, j) => (j === i ? f : x)) }));
-  const removeField = (i) => updateProject((p) => ({ ...p, fields: p.fields.filter((_, j) => j !== i) }));
-  const moveField = (a, b) => updateProject((p) => ({ ...p, fields: moveItem(p.fields, a, b) }));
-  const addField = () => updateProject((p) => ({ ...p, fields: [...p.fields, createField({ label: `Field ${p.fields.length + 1}` })] }));
+  // Helpers that change the list of fields.
+  const setFields = (makeNewFields) =>
+    updateProject((current) => ({ ...current, fields: makeNewFields(current.fields, current) }));
+  const updateField = (index, newField) => setFields((list) => list.map((field, i) => (i === index ? newField : field)));
+  const removeField = (index) => setFields((list) => list.filter((_, i) => i !== index));
+  const moveField = (from, to) => setFields((list) => moveItem(list, from, to));
+  const addField = () => setFields((list) => [...list, createField({ label: `Field ${list.length + 1}` })]);
   const addPreset = (label) => {
     if (!label) return;
-    updateProject((p) => ({ ...p, fields: [...p.fields, createPresetField(label, p.columns, p.urlColumnKey)] }));
+    setFields((list, current) => [...list, createPresetField(label, current.columns, current.urlColumnKey)]);
   };
-  const addSuggested = () => updateProject((p) => ({ ...p, fields: [...p.fields, ...suggestFields(p.columns, p.urlColumnKey)] }));
+  const addSuggested = () => setFields((list, current) => [...list, ...suggestFields(current.columns, current.urlColumnKey)]);
 
-  const renameColumn = (key, name) => updateProject((p) => ({ ...p, columns: p.columns.map((c) => (c.key === key ? { ...c, name } : c)) }));
-  const removeColumn = (key) =>
-    updateProject((p) => ({
-      ...p,
-      columns: p.columns.filter((c) => c.key !== key),
-      fields: p.fields.map((f) => ({
-        ...f,
-        columnKey: f.columnKey === key ? null : f.columnKey,
-      })),
+  const renameColumn = (columnKey, name) =>
+    updateProject((current) => ({
+      ...current,
+      columns: current.columns.map((column) => (column.key === columnKey ? { ...column, name } : column)),
     }));
 
-  const changeUrlColumn = async (key) => {
-    const col = project.columns.find((c) => c.key === key);
-    if (!col || col.index == null) return;
-    updateProject({ urlColumnKey: key });
-    const list = products.map((p) => {
-      const raw = (p.source && p.source[col.index]) || '';
-      return { ...p, url: normalizeProductUrl(raw) || '', rawUrl: raw };
+  // Removing a column also unmaps the fields that wrote to it.
+  const removeColumn = (columnKey) =>
+    updateProject((current) => ({
+      ...current,
+      columns: current.columns.filter((column) => column.key !== columnKey),
+      fields: current.fields.map((field) => (field.columnKey === columnKey ? { ...field, columnKey: null } : field)),
+    }));
+
+  // A different URL column changes every product's URL.
+  const changeUrlColumn = async (columnKey) => {
+    const column = project.columns.find((candidate) => candidate.key === columnKey);
+    if (!column || column.index == null) return;
+    updateProject({ urlColumnKey: columnKey });
+    const updatedProducts = products.map((item) => {
+      const rawUrl = (item.source && item.source[column.index]) || '';
+      return { ...item, url: normalizeProductUrl(rawUrl) || '', rawUrl };
     });
-    setProducts(list);
-    list.forEach((p) => saver.schedule(`product:${p.rowIndex}`, { kind: 'product', value: p }));
+    setProducts(updatedProducts);
+    for (const item of updatedProducts) saver.schedule(`product:${item.rowIndex}`, { kind: 'product', value: item });
   };
 
-  // Columns that receive values from fields: used for combine-format settings and preview.
-  const usage = useMemo(() => {
+  // Columns that receive values from fields: Map(columnKey → field labels).
+  const fieldsByColumn = useMemo(() => {
     const map = new Map();
-    for (const f of fields) {
-      const add = (k, label) => k && map.set(k, [...(map.get(k) || []), label]);
-      add(f.columnKey, f.label);
+    for (const field of fields) {
+      if (!field.columnKey) continue;
+      map.set(field.columnKey, [...(map.get(field.columnKey) || []), field.label]);
     }
     return map;
   }, [fields]);
 
-  const autoLabel = labelColumn({ ...project, labelColumnKey: null });
+  const automaticLabelColumn = labelColumn({ ...project, labelColumnKey: null });
+  const spreadsheetColumns = project.columns.filter((column) => column.index != null);
+  const identifierExample = product ? productLabel(project, product).slice(0, 40) : 'TV001';
 
-  const preview = useMemo(() => (product ? computeRow(project, product) : {}), [project, product]);
-
-  const setFormat = (key, patch) =>
-    updateProject((p) => ({
-      ...p,
-      columnFormats: { ...p.columnFormats, [key]: { ...defaultColumnFormat(), ...(p.columnFormats || {})[key], ...patch } },
-    }));
+  const previewRow = useMemo(() => (product ? computeRow(project, product) : {}), [project, product]);
 
   return (
     <div className="view fields-view">
@@ -219,48 +98,52 @@ export default function FieldsView({ ctx }) {
         <p className="muted small">Rename destination columns or add new ones. Original data in every column is preserved on export.</p>
         <label className="inline-label">
           Product URL column
-          <select value={project.urlColumnKey || ''} onChange={(e) => changeUrlColumn(e.target.value)} data-testid="fields-url-column">
-            {project.columns.filter((c) => c.index != null).map((c) => (
-              <option key={c.key} value={c.key}>{c.name}</option>
+          <select value={project.urlColumnKey || ''} onChange={(event) => changeUrlColumn(event.target.value)} data-testid="fields-url-column">
+            {spreadsheetColumns.map((column) => (
+              <option key={column.key} value={column.key}>{column.name}</option>
             ))}
           </select>
         </label>
         <label className="inline-label">
           Product identifier
           <select
-            value={project.labelColumnKey == null ? '__auto__' : project.labelColumnKey}
-            onChange={(e) => updateProject({ labelColumnKey: e.target.value === '__auto__' ? null : e.target.value })}
+            value={project.labelColumnKey == null ? AUTOMATIC : project.labelColumnKey}
+            onChange={(event) => updateProject({ labelColumnKey: event.target.value === AUTOMATIC ? null : event.target.value })}
             data-testid="label-column"
           >
-            <option value="__auto__">Automatic{autoLabel ? ` (${autoLabel.name})` : ''}</option>
-            {project.columns.filter((c) => c.index != null && c.key !== project.urlColumnKey).map((c) => (
-              <option key={c.key} value={c.key}>{c.name}</option>
-            ))}
+            <option value={AUTOMATIC}>Automatic{automaticLabelColumn ? ` (${automaticLabelColumn.name})` : ''}</option>
+            {spreadsheetColumns
+              .filter((column) => column.key !== project.urlColumnKey)
+              .map((column) => (
+                <option key={column.key} value={column.key}>{column.name}</option>
+              ))}
             <option value="">None (show the URL)</option>
           </select>
         </label>
-        <p className="muted small hint">Shown in the Collect tab's "jump to product" list, e.g. "5. {product ? productLabel(project, product).slice(0, 40) : 'TV001'}".</p>
+        <p className="muted small hint">Shown in the Collect tab's "jump to product" list, e.g. "5. {identifierExample}".</p>
         <ul className="column-list">
-          {project.columns.map((c) => (
-            <li key={c.key} data-testid="column-item">
-              <input value={c.name} onChange={(e) => renameColumn(c.key, e.target.value)} aria-label="Column name" data-testid="column-name" />
+          {project.columns.map((column) => (
+            <li key={column.key} data-testid="column-item">
+              <input value={column.name} onChange={(event) => renameColumn(column.key, event.target.value)} aria-label="Column name" data-testid="column-name" />
               <span className="muted small">
-                {c.index == null ? 'new column' : c.originalName !== c.name ? `was "${c.originalName}"` : 'existing'}
-                {usage.has(c.key) && ` · ← ${usage.get(c.key).join(', ')}`}
+                {columnOrigin(column)}
+                {fieldsByColumn.has(column.key) && ` · ← ${fieldsByColumn.get(column.key).join(', ')}`}
               </span>
-              {c.index == null && <button className="icon-btn" title="Remove column" onClick={() => removeColumn(c.key)}>✕</button>}
+              {column.index == null && (
+                <button className="icon-btn" title="Remove column" onClick={() => removeColumn(column.key)}>✕</button>
+              )}
             </li>
           ))}
         </ul>
         <form
           className="row"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (newColName.trim()) addColumn(newColName.trim());
-            setNewColName('');
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (newColumnName.trim()) addColumn(newColumnName.trim());
+            setNewColumnName('');
           }}
         >
-          <input className="grow" placeholder="New column name" value={newColName} onChange={(e) => setNewColName(e.target.value)} data-testid="new-column-name" />
+          <input className="grow" placeholder="New column name" value={newColumnName} onChange={(event) => setNewColumnName(event.target.value)} data-testid="new-column-name" />
           <button className="btn small" type="submit" data-testid="add-column">Add column</button>
         </form>
       </CollapsibleCard>
@@ -268,7 +151,7 @@ export default function FieldsView({ ctx }) {
       <CollapsibleCard
         id="fields-fields"
         title="Fields"
-        summary={`${fields.length} fields: ${fields.map((f) => f.label).join(', ')}`}
+        summary={`${fields.length} fields: ${fields.map((field) => field.label).join(', ')}`}
         testId="section-fields"
         actions={
           <div className="row">
@@ -276,13 +159,13 @@ export default function FieldsView({ ctx }) {
             <select
               className="preset-select"
               value=""
-              onChange={(e) => addPreset(e.target.value)}
+              onChange={(event) => addPreset(event.target.value)}
               aria-label="Add a ready-made field"
               data-testid="add-preset"
             >
               <option value="">+ Ready-made field…</option>
-              {PRESET_LABELS.map((l) => (
-                <option key={l} value={l}>{l}</option>
+              {PRESET_LABELS.map((label) => (
+                <option key={label} value={label}>{label}</option>
               ))}
             </select>
             <button className="btn small primary" onClick={addField} data-testid="add-field">+ Add field</button>
@@ -293,15 +176,15 @@ export default function FieldsView({ ctx }) {
           Each field is captured manually, by visual selection on the page, or kept from the spreadsheet. Several fields may share one column.
         </p>
         <ul className="field-list">
-          {fields.map((f, i) => (
+          {fields.map((field, index) => (
             <FieldCard
-              key={f.id}
+              key={field.id}
               project={project}
-              field={f}
-              index={i}
+              field={field}
+              index={index}
               count={fields.length}
-              update={(nf) => updateField(i, nf)}
-              remove={() => removeField(i)}
+              update={(newField) => updateField(index, newField)}
+              remove={() => removeField(index)}
               move={moveField}
               addColumn={addColumn}
             />
@@ -311,48 +194,14 @@ export default function FieldsView({ ctx }) {
 
       <ImageSettings project={project} products={products} updateProject={updateProject} />
 
-      <CollapsibleCard id="fields-formatting" defaultCollapsed title="Cell formatting" summary={`${usage.size} columns receive values`} testId="section-formatting">
-        <p className="muted small">
-          How values are combined in each destination column. Preview uses the current product{product ? ` (row ${product.rowIndex + 1})` : ''}.
-        </p>
-        {[...usage.keys()].map((key) => {
-          const col = project.columns.find((c) => c.key === key);
-          if (!col) return null;
-          const fmt = { ...defaultColumnFormat(), ...(project.columnFormats || {})[key] };
-          const multi = usage.get(key).length > 1;
-          return (
-            <div className="format-row" key={key} data-testid="format-row">
-              <div className="format-title">
-                <strong>{col.name}</strong> <span className="muted small">← {usage.get(key).join(' + ')}</span>
-              </div>
-              <div className="form-grid">
-                <label>
-                  Combine as
-                  <select value={fmt.mode} onChange={(e) => setFormat(key, { mode: e.target.value })} data-testid="format-mode">
-                    <option value="join">Separated list (a, b, c)</option>
-                    <option value="path">One path (a &gt; b &gt; c)</option>
-                    {multi && <option value="prefix">Path per value of last field (a &gt; b1, a &gt; b2)</option>}
-                  </select>
-                </label>
-                {fmt.mode !== 'path' && (
-                  <label>
-                    {multi ? 'Separator between fields' : 'Separator'}
-                    <input value={encodeSeparator(fmt.separator)} onChange={(e) => setFormat(key, { separator: decodeSeparator(e.target.value) })} data-testid="format-separator" />
-                  </label>
-                )}
-                {fmt.mode !== 'join' && (
-                  <label>
-                    Path separator
-                    <input value={encodeSeparator(fmt.pathSeparator)} onChange={(e) => setFormat(key, { pathSeparator: decodeSeparator(e.target.value) })} data-testid="format-path-separator" />
-                  </label>
-                )}
-              </div>
-              <pre className="cell-preview" data-testid="format-preview">{(preview[key] && preview[key].value) || '(empty for current product)'}</pre>
-            </div>
-          );
-        })}
-        {!usage.size && <p className="muted">Map fields to columns to configure formatting.</p>}
-      </CollapsibleCard>
+      <CellFormatting
+        project={project}
+        product={product}
+        fieldsByColumn={fieldsByColumn}
+        previewRow={previewRow}
+        updateProject={updateProject}
+      />
+
       <div className="footer-actions">
         <button className="btn primary" onClick={() => setView('collect')} data-testid="go-collect">Start collecting →</button>
       </div>

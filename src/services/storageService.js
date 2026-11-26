@@ -14,14 +14,21 @@ export const BACKUP_FORMAT = 'product-content-collector-backup';
 
 let dbPromise = null;
 
-function req(r) {
+/*
+ * IndexedDB uses callbacks (onsuccess / onerror). These two helpers turn them
+ * into promises so the functions below can use async/await.
+ */
+
+/** Resolves with the result of one IndexedDB request. */
+function requestResult(request) {
   return new Promise((resolve, reject) => {
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
   });
 }
 
-function done(tx) {
+/** Resolves when a transaction has been written completely. */
+function transactionDone(tx) {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
@@ -32,20 +39,21 @@ function done(tx) {
 export function openDb() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const r = indexedDB.open(DB_NAME, DB_VERSION);
-    r.onupgradeneeded = () => {
-      const db = r.result;
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    // Runs when the database is created or DB_VERSION goes up: creates the stores.
+    request.onupgradeneeded = () => {
+      const db = request.result;
       if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('products')) {
-        const s = db.createObjectStore('products', { keyPath: ['projectId', 'rowIndex'] });
-        s.createIndex('byProject', 'projectId');
+        const productStore = db.createObjectStore('products', { keyPath: ['projectId', 'rowIndex'] });
+        productStore.createIndex('byProject', 'projectId');
       }
       if (!db.objectStoreNames.contains('workbooks')) db.createObjectStore('workbooks', { keyPath: 'projectId' });
     };
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => {
-      dbPromise = null;
-      reject(r.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => {
+      dbPromise = null; // allow a retry
+      reject(request.error);
     };
   });
   return dbPromise;
@@ -78,31 +86,31 @@ export function newProject(name) {
 export async function listProjects() {
   const db = await openDb();
   const tx = db.transaction(['projects', 'products'], 'readonly');
-  const projects = await req(tx.objectStore('projects').getAll());
-  const products = tx.objectStore('products');
+  const projects = await requestResult(tx.objectStore('projects').getAll());
+  const productsByProject = tx.objectStore('products').index('byProject');
   const result = [];
-  for (const p of projects) {
-    const list = await req(products.index('byProject').getAll(p.id));
-    const counts = { total: list.length, pending: 0, in_progress: 0, completed: 0, skipped: 0 };
-    for (const x of list) counts[x.status] = (counts[x.status] || 0) + 1;
-    result.push({ ...p, counts });
+  for (const project of projects) {
+    const products = await requestResult(productsByProject.getAll(project.id));
+    const counts = { total: products.length, pending: 0, in_progress: 0, completed: 0, skipped: 0 };
+    for (const product of products) counts[product.status] = (counts[product.status] || 0) + 1;
+    result.push({ ...project, counts });
   }
   return result.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export async function getProject(id) {
   const db = await openDb();
-  return req(db.transaction('projects').objectStore('projects').get(id));
+  return requestResult(db.transaction('projects').objectStore('projects').get(id));
 }
 
 export async function saveProject(project) {
   const db = await openDb();
   const tx = db.transaction('projects', 'readwrite');
-  const p = { ...project, updatedAt: Date.now() };
-  delete p.counts;
-  tx.objectStore('projects').put(p);
-  await done(tx);
-  return p;
+  const saved = { ...project, updatedAt: Date.now() };
+  delete saved.counts; // added by listProjects for display only
+  tx.objectStore('projects').put(saved);
+  await transactionDone(tx);
+  return saved;
 }
 
 export async function deleteProject(id) {
@@ -110,62 +118,64 @@ export async function deleteProject(id) {
   const tx = db.transaction(['projects', 'products', 'workbooks'], 'readwrite');
   tx.objectStore('projects').delete(id);
   tx.objectStore('workbooks').delete(id);
-  const store = tx.objectStore('products');
-  const keys = await req(store.index('byProject').getAllKeys(id));
-  for (const k of keys) store.delete(k);
-  await done(tx);
+  const productStore = tx.objectStore('products');
+  const productKeys = await requestResult(productStore.index('byProject').getAllKeys(id));
+  for (const key of productKeys) productStore.delete(key);
+  await transactionDone(tx);
 }
 
 export async function getProducts(projectId) {
   const db = await openDb();
-  const list = await req(db.transaction('products').objectStore('products').index('byProject').getAll(projectId));
-  return list.sort((a, b) => a.position - b.position);
+  const productsByProject = db.transaction('products').objectStore('products').index('byProject');
+  const products = await requestResult(productsByProject.getAll(projectId));
+  return products.sort((a, b) => a.position - b.position);
 }
 
 export async function saveProduct(product) {
   const db = await openDb();
   const tx = db.transaction('products', 'readwrite');
   tx.objectStore('products').put({ ...product, updatedAt: Date.now() });
-  await done(tx);
+  await transactionDone(tx);
 }
 
 /** Replaces all products of a project. */
 export async function replaceProducts(projectId, products) {
   const db = await openDb();
   const tx = db.transaction('products', 'readwrite');
-  const store = tx.objectStore('products');
-  const keys = await req(store.index('byProject').getAllKeys(projectId));
-  for (const k of keys) store.delete(k);
-  for (const p of products) store.put({ ...p, projectId });
-  await done(tx);
+  const productStore = tx.objectStore('products');
+  const oldKeys = await requestResult(productStore.index('byProject').getAllKeys(projectId));
+  for (const key of oldKeys) productStore.delete(key);
+  for (const product of products) productStore.put({ ...product, projectId });
+  await transactionDone(tx);
 }
 
 export async function saveWorkbook(projectId, bytes, fileName) {
   const db = await openDb();
   const tx = db.transaction('workbooks', 'readwrite');
   tx.objectStore('workbooks').put({ projectId, bytes: new Uint8Array(bytes), fileName, savedAt: Date.now() });
-  await done(tx);
+  await transactionDone(tx);
 }
 
 export async function getWorkbook(projectId) {
   const db = await openDb();
-  const rec = await req(db.transaction('workbooks').objectStore('workbooks').get(projectId));
-  if (!rec) return null;
-  return { ...rec, bytes: new Uint8Array(rec.bytes) };
+  const record = await requestResult(db.transaction('workbooks').objectStore('workbooks').get(projectId));
+  if (!record) return null;
+  return { ...record, bytes: new Uint8Array(record.bytes) };
 }
 
+/** Everything about a project (settings, products, workbook) as one JSON-ready object. */
 export async function exportBackup(projectId) {
   const project = await getProject(projectId);
   if (!project) throw new Error('Project not found.');
   const products = await getProducts(projectId);
-  const wb = await getWorkbook(projectId);
+  const workbook = await getWorkbook(projectId);
   return {
     format: BACKUP_FORMAT,
     version: 1,
     exportedAt: new Date().toISOString(),
     project,
     products,
-    workbook: wb ? { fileName: wb.fileName, base64: bytesToBase64(wb.bytes) } : null,
+    workbook: workbook ? { fileName: workbook.fileName, base64: bytesToBase64(workbook.bytes) } : null,
   };
 }
 
@@ -184,7 +194,8 @@ export async function importBackup(backup) {
     project.name = `${project.name} (restored)`;
   }
   await saveProject(project);
-  await replaceProducts(project.id, (backup.products || []).map((p) => ({ ...p, projectId: project.id })));
+  const products = (backup.products || []).map((product) => ({ ...product, projectId: project.id }));
+  await replaceProducts(project.id, products);
   if (backup.workbook && backup.workbook.base64) {
     await saveWorkbook(project.id, base64ToBytes(backup.workbook.base64), backup.workbook.fileName);
   }

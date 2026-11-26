@@ -11,17 +11,30 @@ import DOMPurify from 'dompurify';
  *     -> stored as a selection item { html, sourceTag, outputTag }
  * At render/export time the output tag is applied with changeTag() and the
  * result passes through DOMPurify once more.
+ *
+ * The functions work on real DOM nodes (document.createElement etc.), which is
+ * the most reliable way to restructure HTML in the browser.
  */
 
 export const HEADING_TAGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
 const LIST_TAGS = ['ul', 'ol'];
+
+/** Layout-only containers: removed or turned into <p>, since they carry no meaning of their own. */
 const WRAPPER_TAGS = ['div', 'section', 'article', 'main', 'aside', 'header', 'footer', 'figure', 'span', 'font', 'center'];
+
 const BLOCK_TAGS = new Set([
   ...HEADING_TAGS, 'p', 'ul', 'ol', 'li', 'dl', 'dt', 'dd', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th',
   'caption', 'blockquote', 'pre', 'hr', 'div', 'section', 'article', 'main', 'aside', 'header', 'footer', 'figure',
   'figcaption', 'center',
 ]);
-const VOID_KEEP = new Set(['br', 'hr', 'img']);
+
+/** Tags that may only contain text and inline formatting, not blocks. */
+const PHRASING_PARENT_TAGS = ['p', ...HEADING_TAGS, 'li', 'td', 'th', 'dt', 'dd', 'a', 'strong', 'em', 'b', 'i'];
+
+/** Empty tags that still mean something on their own. */
+const MEANINGFUL_EMPTY_TAGS = new Set(['br', 'hr', 'img']);
+
+const NON_BREAKING_SPACE = / /g;
 
 export const ALLOWED_TAGS = [
   ...HEADING_TAGS, 'p', 'br', 'hr', 'ul', 'ol', 'li', 'dl', 'dt', 'dd',
@@ -31,6 +44,7 @@ export const ALLOWED_TAGS = [
 ];
 export const ALLOWED_ATTR = ['href', 'src', 'alt', 'title', 'colspan', 'rowspan'];
 
+/** Tags removed together with everything inside them. */
 const FORBID_CONTENTS = [
   'script', 'style', 'noscript', 'template', 'iframe', 'frame', 'frameset', 'object', 'embed', 'applet',
   'svg', 'math', 'canvas', 'video', 'audio', 'picture', 'source', 'track', 'button', 'select', 'option',
@@ -46,7 +60,7 @@ const PURIFY_CONFIG = {
   FORBID_CONTENTS,
   ALLOW_DATA_ATTR: false,
   ALLOW_ARIA_ATTR: false,
-  KEEP_CONTENT: true,
+  KEEP_CONTENT: true, // a removed tag (e.g. <font>) keeps its text
   ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/)/i,
 };
 
@@ -54,99 +68,133 @@ function purify(html) {
   return DOMPurify.sanitize(String(html ?? ''), PURIFY_CONFIG);
 }
 
+/** Parses an HTML string into a DocumentFragment without running scripts or loading images. */
 function parse(html) {
-  const tpl = document.createElement('template');
-  tpl.innerHTML = html;
-  return tpl.content;
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  return template.content;
 }
 
-function serialize(fragment) {
-  const div = document.createElement('div');
-  div.appendChild(fragment.cloneNode(true));
-  return div.innerHTML;
+function tagOf(element) {
+  return element.nodeName.toLowerCase();
 }
 
-function tagOf(el) {
-  return el.nodeName.toLowerCase();
+function isElement(node) {
+  return node.nodeType === Node.ELEMENT_NODE;
 }
 
-function hasBlockChild(el) {
-  return [...el.children].some((c) => BLOCK_TAGS.has(tagOf(c)));
+function isText(node) {
+  return node.nodeType === Node.TEXT_NODE;
 }
 
-function isMeaningful(el) {
-  if (VOID_KEEP.has(tagOf(el))) return true;
-  if (el.querySelector && el.querySelector('img,br,hr')) return true;
-  return (el.textContent || '').replace(/ /g, ' ').trim().length > 0;
+function isWhitespaceText(node) {
+  return isText(node) && !node.textContent.trim();
 }
 
-function unwrap(el) {
-  const parent = el.parentNode;
-  while (el.firstChild) parent.insertBefore(el.firstChild, el);
-  parent.removeChild(el);
+function hasBlockChild(element) {
+  return [...element.children].some((child) => BLOCK_TAGS.has(tagOf(child)));
 }
 
-function rename(el, tag) {
-  const doc = el.ownerDocument;
-  const n = doc.createElement(tag);
-  for (const a of [...el.attributes]) n.setAttribute(a.name, a.value);
-  while (el.firstChild) n.appendChild(el.firstChild);
-  el.parentNode.replaceChild(n, el);
-  return n;
+/** True when an element has visible content: text, an image, a line break or a rule. */
+function isMeaningful(element) {
+  if (MEANINGFUL_EMPTY_TAGS.has(tagOf(element))) return true;
+  if (element.querySelector && element.querySelector('img,br,hr')) return true;
+  const text = (element.textContent || '').replace(NON_BREAKING_SPACE, ' ');
+  return text.trim().length > 0;
+}
+
+/**
+ * The only element inside `container`, or null when there are several
+ * elements or there is text next to the element.
+ * "<ul>…</ul>" → the ul;  "<p>a</p><p>b</p>" → null;  "Hello <b>x</b>" → null
+ */
+function singleRootElement(container) {
+  const elements = [...container.children];
+  if (elements.length !== 1) return null;
+  const textOutsideElement = (container.textContent || '').replace(elements[0].textContent, '');
+  return textOutsideElement.trim() ? null : elements[0];
+}
+
+/** Replaces an element by its children: <span>a <b>b</b></span> → a <b>b</b> */
+function unwrap(element) {
+  const parent = element.parentNode;
+  while (element.firstChild) parent.insertBefore(element.firstChild, element);
+  parent.removeChild(element);
+}
+
+/** Changes an element's tag, keeping attributes and children. Returns the new element. */
+function rename(element, tag) {
+  const replacement = element.ownerDocument.createElement(tag);
+  for (const attribute of [...element.attributes]) replacement.setAttribute(attribute.name, attribute.value);
+  while (element.firstChild) replacement.appendChild(element.firstChild);
+  element.parentNode.replaceChild(replacement, element);
+  return replacement;
+}
+
+/** The nearest sibling in a direction ('previousSibling' or 'nextSibling'), skipping whitespace-only text. */
+function siblingIgnoringWhitespace(node, direction) {
+  let sibling = node[direction];
+  while (sibling && isWhitespaceText(sibling)) sibling = sibling[direction];
+  return sibling;
 }
 
 /** Structural clean of all descendants of `container` (container itself untouched). */
 function cleanChildren(container) {
-  // Bottom-up so inner wrappers are resolved before outer decisions.
-  const all = [...container.querySelectorAll('*')].reverse();
-  for (const el of all) {
-    if (!container.contains(el)) continue;
-    const tag = tagOf(el);
+  // Work bottom-up (deepest elements first) so inner wrappers are resolved
+  // before deciding what to do with the outer ones.
+  const elementsDeepestFirst = [...container.querySelectorAll('*')].reverse();
+
+  for (const element of elementsDeepestFirst) {
+    if (!container.contains(element)) continue; // already removed with a parent
+    const tag = tagOf(element);
+
     if (tag === 'img') {
-      const src = el.getAttribute('src') || '';
-      if (!/^https?:/i.test(src)) el.remove();
+      const src = element.getAttribute('src') || '';
+      if (!/^https?:/i.test(src)) element.remove(); // data: URIs, placeholders
       continue;
     }
+
     if (tag === 'a') {
-      const href = el.getAttribute('href') || '';
+      const href = element.getAttribute('href') || '';
       if (!href || href.startsWith('#')) {
-        unwrap(el);
+        unwrap(element); // links to nowhere or to the same page: keep the text only
         continue;
       }
     }
-    if (!isMeaningful(el)) {
-      el.remove();
+
+    if (!isMeaningful(element)) {
+      element.remove();
       continue;
     }
+
     if (tag === 'span' || tag === 'font') {
-      unwrap(el);
+      unwrap(element);
       continue;
     }
+
     if (WRAPPER_TAGS.includes(tag)) {
-      const parentTag = el.parentNode && el.parentNode.nodeType === 1 ? tagOf(el.parentNode) : 'div';
-      const parentIsPhrasing = ['p', ...HEADING_TAGS, 'li', 'td', 'th', 'dt', 'dd', 'a', 'strong', 'em', 'b', 'i'].includes(parentTag);
-      if (hasBlockChild(el) || parentIsPhrasing) unwrap(el);
-      else rename(el, 'p');
+      const parentTag = element.parentNode && isElement(element.parentNode) ? tagOf(element.parentNode) : 'div';
+      // A wrapper around blocks (or inside a paragraph-like tag) is just removed;
+      // a wrapper around plain text becomes a paragraph.
+      if (hasBlockChild(element) || PHRASING_PARENT_TAGS.includes(parentTag)) unwrap(element);
+      else rename(element, 'p');
     }
   }
-  // Drop a <br> at the very start/end of block containers.
-  for (const br of [...container.querySelectorAll('br')]) {
-    const p = br.parentNode;
-    const sib = (n, dir) => {
-      let x = n[dir];
-      while (x && x.nodeType === 3 && !x.textContent.trim()) x = x[dir];
-      return x;
-    };
-    if (p && p !== container && (!sib(br, 'previousSibling') || !sib(br, 'nextSibling'))) br.remove();
+
+  // Drop a <br> at the very start or end of a block: it only adds empty space.
+  for (const lineBreak of [...container.querySelectorAll('br')]) {
+    const parent = lineBreak.parentNode;
+    if (!parent || parent === container) continue;
+    const isFirst = !siblingIgnoringWhitespace(lineBreak, 'previousSibling');
+    const isLast = !siblingIgnoringWhitespace(lineBreak, 'nextSibling');
+    if (isFirst || isLast) lineBreak.remove();
   }
 }
 
 /** Sanitises arbitrary HTML (used for manual HTML fields and final output). */
 export function sanitizeHtml(html) {
-  const clean = purify(html);
-  const frag = parse(clean);
   const holder = document.createElement('div');
-  holder.appendChild(frag);
+  holder.appendChild(parse(purify(html)));
   cleanChildren(holder);
   return tidy(purify(holder.innerHTML));
 }
@@ -156,65 +204,79 @@ export function safeHtml(html) {
   return purify(html);
 }
 
+const BLOCK_TAG_IN_HTML = /\s*(<\/?(?:h[1-6]|p|ul|ol|li|dl|dt|dd|table|thead|tbody|tfoot|tr|td|th|blockquote|div|figure|figcaption|caption|pre)\b[^>]*>)\s*/gi;
+
+/** Normalises whitespace: one space between words, none around block tags. */
 function tidy(html) {
   return html
-    .replace(/ /g, ' ')
+    .replace(NON_BREAKING_SPACE, ' ')
     .replace(/[ \t\r\n]+/g, ' ')
-    .replace(/\s*(<\/?(?:h[1-6]|p|ul|ol|li|dl|dt|dd|table|thead|tbody|tfoot|tr|td|th|blockquote|div|figure|figcaption|caption|pre)\b[^>]*>)\s*/gi, '$1')
+    .replace(BLOCK_TAG_IN_HTML, '$1')
     .trim();
 }
 
+/** Output tag suggested for a newly captured element. */
 function defaultOutputTag(sourceTag, root) {
-  if (sourceTag === 'li') return 'p';
-  if (WRAPPER_TAGS.includes(sourceTag) || !ALLOWED_TAGS.includes(sourceTag)) {
+  if (sourceTag === 'li') return 'p'; // a single list item on its own is a paragraph
+  const isWrapperOrUnknown = WRAPPER_TAGS.includes(sourceTag) || !ALLOWED_TAGS.includes(sourceTag);
+  if (isWrapperOrUnknown) {
     return root && hasBlockChild(root) ? 'unwrap' : 'p';
   }
   return 'keep';
 }
 
-/**
- * Cleans the HTML of one captured element.
- * Returns { html, sourceTag, outputTag, text } — html always has a single root element.
- */
-export function cleanCapturedHtml(rawHtml, sourceTagHint) {
-  const sourceTag = (sourceTagHint || (/^\s*<([a-z0-9-]+)/i.exec(rawHtml || '') || [])[1] || 'div').toLowerCase();
-  // Wrap first so a non-allowed root tag (e.g. <font>, custom elements) still yields a root.
-  const clean = purify(`<div>${rawHtml || ''}</div>`);
-  const frag = parse(clean);
-  let outer = frag.firstElementChild;
-  if (!outer) outer = document.createElement('div');
-  let root = outer.children.length === 1 && !(outer.textContent || '').replace(outer.children[0].textContent, '').trim()
-    ? outer.children[0]
-    : outer;
-  const synthetic = root === outer; // several roots or bare text: store as a fragment, never add a wrapper
-  if (!synthetic && WRAPPER_TAGS.includes(tagOf(root)) && tagOf(root) !== 'div') root = rename(root, 'div');
-  if (!synthetic) outer = root;
-  cleanChildren(outer);
-  const text = htmlToText(outer.innerHTML);
-  if (synthetic) {
-    const html = tidy(outer.innerHTML);
-    return { html, sourceTag, outputTag: hasBlockChild(outer) ? 'keep' : defaultOutputTag(sourceTag, outer), text };
-  }
-  const html = tidy(outer.outerHTML);
-  return { html, sourceTag, outputTag: defaultOutputTag(sourceTag, outer), text };
+/** The captured element's tag: the hint from the content script, else the first tag in the HTML. */
+function capturedTagName(rawHtml, sourceTagHint) {
+  if (sourceTagHint) return sourceTagHint.toLowerCase();
+  const firstTag = /^\s*<([a-z0-9-]+)/i.exec(rawHtml || '');
+  return firstTag ? firstTag[1].toLowerCase() : 'div';
 }
 
-/** Converts the children of `el` into inline content, separating former blocks with <br>. */
-function flattenInto(target, el) {
+/**
+ * Cleans the HTML of one captured element.
+ * Returns { html, sourceTag, outputTag, text }.
+ */
+export function cleanCapturedHtml(rawHtml, sourceTagHint) {
+  const sourceTag = capturedTagName(rawHtml, sourceTagHint);
+  // Wrap first so a non-allowed root tag (e.g. <font>, custom elements) still yields a root.
+  const wrapper = parse(purify(`<div>${rawHtml || ''}</div>`)).firstElementChild || document.createElement('div');
+  let root = singleRootElement(wrapper);
+
+  if (!root) {
+    // Several roots or bare text: store as a fragment, never add a wrapper element.
+    cleanChildren(wrapper);
+    const outputTag = hasBlockChild(wrapper) ? 'keep' : defaultOutputTag(sourceTag, wrapper);
+    return { html: tidy(wrapper.innerHTML), sourceTag, outputTag, text: htmlToText(wrapper.innerHTML) };
+  }
+
+  // <section>, <article> etc. are stored as <div>.
+  if (WRAPPER_TAGS.includes(tagOf(root)) && tagOf(root) !== 'div') root = rename(root, 'div');
+  cleanChildren(root);
+  return { html: tidy(root.outerHTML), sourceTag, outputTag: defaultOutputTag(sourceTag, root), text: htmlToText(root.innerHTML) };
+}
+
+/**
+ * Copies the content of `source` into `target` as inline content: block
+ * children are flattened and separated with <br>.
+ * <div><p>a</p><p>b</p></div> → a<br>b
+ */
+function flattenInto(target, source) {
   const doc = target.ownerDocument;
-  let needBreak = false;
-  for (const child of [...el.childNodes]) {
-    const isBlock = child.nodeType === 1 && BLOCK_TAGS.has(tagOf(child));
+  let breakBeforeNext = false; // set after a block, so following text starts on a new line
+
+  for (const child of [...source.childNodes]) {
+    const isBlock = isElement(child) && BLOCK_TAGS.has(tagOf(child));
     if (isBlock) {
       if (target.childNodes.length) target.appendChild(doc.createElement('br'));
       flattenInto(target, child);
-      needBreak = true;
-    } else {
-      if (child.nodeType === 3 && !child.textContent.trim() && (needBreak || !target.childNodes.length)) continue;
-      if (needBreak && target.childNodes.length) target.appendChild(doc.createElement('br'));
-      needBreak = false;
-      target.appendChild(child.cloneNode(true));
+      breakBeforeNext = true;
+      continue;
     }
+    // Skip whitespace at the start and right after a block.
+    if (isWhitespaceText(child) && (breakBeforeNext || !target.childNodes.length)) continue;
+    if (breakBeforeNext && target.childNodes.length) target.appendChild(doc.createElement('br'));
+    breakBeforeNext = false;
+    target.appendChild(child.cloneNode(true));
   }
 }
 
@@ -224,44 +286,51 @@ function flattenInto(target, el) {
  * and list conversions.
  */
 export function changeTag(html, tag) {
-  const frag = parse(purify(html));
-  const elements = [...frag.children];
-  let root;
-  let synthetic = false;
-  if (elements.length === 1 && !(frag.textContent || '').replace(elements[0].textContent, '').trim()) {
-    root = elements[0];
-  } else {
-    // Several top-level nodes: a temporary container that is never output itself.
-    synthetic = true;
+  const fragment = parse(purify(html));
+  let root = singleRootElement(fragment);
+  const isFragment = !root;
+  if (isFragment) {
+    // Several top-level nodes: use a temporary container that is never output itself.
     root = document.createElement('div');
-    while (frag.firstChild) root.appendChild(frag.firstChild);
+    while (fragment.firstChild) root.appendChild(fragment.firstChild);
   }
-  const from = synthetic ? null : tagOf(root);
-  if (!tag || tag === 'keep' || tag === from) return tidy(synthetic ? root.innerHTML : root.outerHTML);
+  const fromTag = isFragment ? null : tagOf(root);
+
+  if (!tag || tag === 'keep' || tag === fromTag) {
+    return tidy(isFragment ? root.innerHTML : root.outerHTML);
+  }
   if (tag === 'unwrap') return tidy(root.innerHTML);
 
-  const out = document.createElement(tag);
+  const result = document.createElement(tag);
+
   if (LIST_TAGS.includes(tag)) {
-    if (LIST_TAGS.includes(from)) {
-      for (const c of [...root.childNodes]) out.appendChild(c.cloneNode(true));
-    } else if (from === 'li') {
-      const li = document.createElement('li');
-      li.innerHTML = root.innerHTML;
-      out.appendChild(li);
+    if (LIST_TAGS.includes(fromTag)) {
+      // ul ↔ ol: keep the items as they are.
+      for (const child of [...root.childNodes]) result.appendChild(child.cloneNode(true));
+    } else if (fromTag === 'li') {
+      result.appendChild(copyAsListItem(root));
     } else {
-      for (const li of listItemsFrom(root)) out.appendChild(li);
+      for (const listItem of listItemsFrom(root)) result.appendChild(listItem);
     }
-  } else if (['div', 'blockquote'].includes(tag)) {
-    if (LIST_TAGS.includes(from) || from === 'li') {
-      flattenInto(out, root);
+  } else if (tag === 'div' || tag === 'blockquote') {
+    // These may contain blocks, but list items need a list around them, so lists are flattened.
+    if (LIST_TAGS.includes(fromTag) || fromTag === 'li') {
+      flattenInto(result, root);
     } else {
-      for (const c of [...root.childNodes]) out.appendChild(c.cloneNode(true));
+      for (const child of [...root.childNodes]) result.appendChild(child.cloneNode(true));
     }
   } else {
     // Phrasing containers (p, headings, strong, em): may not contain blocks.
-    flattenInto(out, root);
+    flattenInto(result, root);
   }
-  return tidy(out.outerHTML);
+  return tidy(result.outerHTML);
+}
+
+/** A new <li> with the same content as `element`. */
+function copyAsListItem(element) {
+  const listItem = document.createElement('li');
+  listItem.innerHTML = element.innerHTML;
+  return listItem;
 }
 
 /**
@@ -270,94 +339,92 @@ export function changeTag(html, tag) {
  */
 function listItemsFrom(root) {
   const items = [];
-  let cur = null;
-  const flush = () => {
-    if (cur && isMeaningful(cur)) items.push(cur);
-    cur = null;
+  let currentItem = null; // collects inline content (text, <b>, <a> …) until the next break or block
+
+  const finishCurrentItem = () => {
+    if (currentItem && isMeaningful(currentItem)) items.push(currentItem);
+    currentItem = null;
   };
-  for (const c of [...root.childNodes]) {
-    if (c.nodeType === 1) {
-      const t = tagOf(c);
-      if (t === 'br') {
-        flush();
+  const addItem = (listItem) => {
+    if (isMeaningful(listItem)) items.push(listItem);
+  };
+
+  for (const child of [...root.childNodes]) {
+    if (isElement(child)) {
+      const tag = tagOf(child);
+
+      if (tag === 'br') {
+        finishCurrentItem();
         continue;
       }
-      if (t === 'li') {
-        flush();
-        const li = document.createElement('li');
-        li.innerHTML = c.innerHTML;
-        if (isMeaningful(li)) items.push(li);
+      if (tag === 'li') {
+        finishCurrentItem();
+        addItem(copyAsListItem(child));
         continue;
       }
-      if (LIST_TAGS.includes(t)) {
-        flush();
-        for (const item of [...c.children]) {
-          const li = document.createElement('li');
-          li.innerHTML = item.innerHTML;
-          if (isMeaningful(li)) items.push(li);
+      if (LIST_TAGS.includes(tag)) {
+        finishCurrentItem();
+        for (const existingItem of [...child.children]) addItem(copyAsListItem(existingItem));
+        continue;
+      }
+      if (BLOCK_TAGS.has(tag)) {
+        finishCurrentItem();
+        if (hasBlockChild(child) || child.querySelector('br')) {
+          // A block with its own structure (e.g. a div of paragraphs): split it too.
+          items.push(...listItemsFrom(child));
+        } else {
+          const listItem = document.createElement('li');
+          flattenInto(listItem, child);
+          addItem(listItem);
         }
         continue;
       }
-      if (BLOCK_TAGS.has(t)) {
-        flush();
-        if (hasBlockChild(c) || c.querySelector('br')) items.push(...listItemsFrom(c));
-        else {
-          const li = document.createElement('li');
-          flattenInto(li, c);
-          if (isMeaningful(li)) items.push(li);
-        }
-        continue;
-      }
+      // Inline elements fall through and are added to the current item.
     }
-    if (c.nodeType === 3 && !c.textContent.trim() && !cur) continue;
-    if (c.nodeType !== 1 && c.nodeType !== 3) continue;
-    if (!cur) cur = document.createElement('li');
-    cur.appendChild(c.cloneNode(true));
+
+    if (isWhitespaceText(child) && !currentItem) continue; // no item starts with whitespace
+    if (!isElement(child) && !isText(child)) continue; // comments
+    if (!currentItem) currentItem = document.createElement('li');
+    currentItem.appendChild(child.cloneNode(true));
   }
-  flush();
+
+  finishCurrentItem();
   return items;
 }
 
 /** The <li> elements (as HTML) that a piece of content becomes when turned into a list. */
 export function listItemsOf(html) {
-  const frag = parse(changeTag(html, 'ul'));
-  const list = frag.firstElementChild;
+  const list = parse(changeTag(html, 'ul')).firstElementChild;
   if (!list) return [];
-  return [...list.children].filter((c) => tagOf(c) === 'li').map((li) => tidy(li.outerHTML));
+  return [...list.children]
+    .filter((child) => tagOf(child) === 'li')
+    .map((listItem) => tidy(listItem.outerHTML));
 }
 
-export function buildList(tag, liHtml) {
-  const t = tag === 'ol' ? 'ol' : 'ul';
-  return tidy(purify(`<${t}>${liHtml.join('')}</${t}>`));
+/** <ul> or <ol> around the given <li> HTML strings. */
+export function buildList(tag, listItemsHtml) {
+  const listTag = tag === 'ol' ? 'ol' : 'ul';
+  return tidy(purify(`<${listTag}>${listItemsHtml.join('')}</${listTag}>`));
 }
 
 /** Combines several selection items (in order) into one list item. */
 export function mergeIntoList(items, tag, id) {
-  const lis = items.flatMap((i) => listItemsOf(renderSelection(i)));
-  const html = buildList(tag, lis);
+  const listItemsHtml = items.flatMap((item) => listItemsOf(renderSelection(item)));
+  const html = buildList(tag, listItemsHtml);
   return { id, html, text: htmlToText(html), sourceTag: tag === 'ol' ? 'ol' : 'ul', outputTag: 'keep' };
 }
 
 /** Adds the content of `addHtml` as new <li> items at the end of the list in `listHtml`. */
 export function appendToList(listHtml, addHtml, tag) {
-  const t = rootTag(listHtml);
-  const listTag = LIST_TAGS.includes(t) ? t : tag || 'ul';
+  const existingTag = rootTag(listHtml);
+  const listTag = LIST_TAGS.includes(existingTag) ? existingTag : tag || 'ul';
   return buildList(listTag, [...listItemsOf(listHtml), ...listItemsOf(addHtml)]);
-}
-
-function wrapNode(node) {
-  const d = document.createElement('div');
-  d.appendChild(node.cloneNode(true));
-  return d;
 }
 
 /** Tag of the single root element of an HTML snippet, or null for a fragment / plain text. */
 export function rootTag(html) {
-  const frag = parse(purify(html || ''));
-  const els = [...frag.children];
-  if (els.length !== 1) return null;
-  if ((frag.textContent || '').replace(els[0].textContent, '').trim()) return null;
-  return tagOf(els[0]);
+  const root = singleRootElement(parse(purify(html || '')));
+  return root ? tagOf(root) : null;
 }
 
 /**
@@ -378,39 +445,52 @@ export function renderSelection(item) {
 
 /** Combines selection items into one HTML string, preserving order. */
 export function combineSelections(items, separator = '\n') {
-  return (items || []).map(renderSelection).filter((h) => h.trim()).join(separator);
+  return (items || [])
+    .map(renderSelection)
+    .filter((html) => html.trim())
+    .join(separator);
 }
 
+/** Plain text of some HTML, with a space where blocks and line breaks were. */
 export function htmlToText(html) {
-  const frag = parse(purify(String(html ?? '').replace(/<br\s*\/?>/gi, ' ').replace(/<\/(p|h[1-6]|li|div|td|th|dt|dd|tr)>/gi, '</$1> ')));
-  return (frag.textContent || '').replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
+  const withSpaces = String(html ?? '')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/(p|h[1-6]|li|div|td|th|dt|dd|tr)>/gi, '</$1> ');
+  const text = parse(purify(withSpaces)).textContent || '';
+  return text.replace(NON_BREAKING_SPACE, ' ').replace(/\s+/g, ' ').trim();
 }
 
 /** Pretty-prints HTML for the source view: one block per line, nested lists/tables indented. */
 export function formatHtmlSource(html) {
-  const NEST = 'ul|ol|table|thead|tbody|tfoot|tr|dl';
-  const text = String(html || '')
+  const NESTING_TAGS = 'ul|ol|table|thead|tbody|tfoot|tr|dl'; // tags whose content is indented
+  const opensNesting = new RegExp(`<(?:${NESTING_TAGS})\\b[^>]*>$`, 'i');
+  const closesNesting = new RegExp(`^<\\/(?:${NESTING_TAGS})>`, 'i');
+
+  // Step 1: put line breaks after block closing tags and around list/table tags.
+  const withLineBreaks = String(html || '')
     .replace(/(<\/(?:h[1-6]|p|li|blockquote|div|dt|dd|td|th|caption|pre|figure|figcaption)>)/gi, '$1\n')
-    .replace(new RegExp(`(<(?:${NEST})\\b[^>]*>)`, 'gi'), '$1\n')
-    .replace(new RegExp(`(<\\/(?:${NEST})>)`, 'gi'), '\n$1\n');
-  const closeRe = new RegExp(`^<\\/(?:${NEST})>`, 'i');
-  const openRe = new RegExp(`<(?:${NEST})\\b[^>]*>$`, 'i');
+    .replace(new RegExp(`(<(?:${NESTING_TAGS})\\b[^>]*>)`, 'gi'), '$1\n')
+    .replace(new RegExp(`(<\\/(?:${NESTING_TAGS})>)`, 'gi'), '\n$1\n');
+
+  // Step 2: indent each line by how many lists/tables it is inside.
   let depth = 0;
-  const out = [];
-  for (const raw of text.split('\n')) {
-    const line = raw.trim();
+  const lines = [];
+  for (const rawLine of withLineBreaks.split('\n')) {
+    const line = rawLine.trim();
     if (!line) continue;
-    if (closeRe.test(line)) depth = Math.max(0, depth - 1);
-    out.push('  '.repeat(depth) + line);
-    if (openRe.test(line)) depth++;
+    if (closesNesting.test(line)) depth = Math.max(0, depth - 1);
+    lines.push('  '.repeat(depth) + line);
+    if (opensNesting.test(line)) depth++;
   }
-  return out.join('\n');
+  return lines.join('\n');
 }
 
+/** A copy of `list` with the item at position `from` moved to position `to`. */
 export function moveItem(list, from, to) {
-  const arr = [...list];
-  if (from < 0 || from >= arr.length || to < 0 || to >= arr.length) return arr;
-  const [x] = arr.splice(from, 1);
-  arr.splice(to, 0, x);
-  return arr;
+  const result = [...list];
+  const outOfRange = (index) => index < 0 || index >= result.length;
+  if (outOfRange(from) || outOfRange(to)) return result;
+  const [movedItem] = result.splice(from, 1);
+  result.splice(to, 0, movedItem);
+  return result;
 }

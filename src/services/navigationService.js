@@ -53,11 +53,24 @@ export async function ensureContentScript(tab) {
   }
 }
 
+/** Starts the visual selector on the page for one field. */
 export async function startSelection(tab, field) {
   await ensureContentScript(tab);
+
+  // "Clicks build one list" (ul/ol) only exists for HTML fields.
+  const captureAs = field.kind === 'html' && field.captureAs ? field.captureAs : 'items';
+  const buildsList = captureAs === 'ul' || captureAs === 'ol';
+
   await chrome.tabs.sendMessage(tab.id, {
     type: 'pcc:start',
-    field: { id: field.id, label: field.label, kind: field.kind, multiple: !!field.multiple || (field.kind === 'html' && ['ul', 'ol'].includes(field.captureAs)), captureAs: field.kind === 'html' ? field.captureAs || 'items' : 'items' },
+    field: {
+      id: field.id,
+      label: field.label,
+      kind: field.kind,
+      // Building a list needs several clicks, so keep selecting after the first one.
+      multiple: !!field.multiple || buildsList,
+      captureAs,
+    },
   });
 }
 

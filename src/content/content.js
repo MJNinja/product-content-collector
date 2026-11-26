@@ -9,27 +9,29 @@ import { createSelector } from './selector.js';
   if (window.__productContentCollector) return;
   window.__productContentCollector = true;
 
-  const send = (msg) => {
+  /** Sends a message to the side panel; ignored when the panel is closed. */
+  const sendToPanel = (message) => {
     try {
-      chrome.runtime.sendMessage(msg).catch(() => {});
+      chrome.runtime.sendMessage(message).catch(() => {});
     } catch {
       /* extension reloaded: ignore */
     }
   };
 
   const selector = createSelector({
-    onCapture: (field, payload) => send({ type: 'pcc:captured', fieldId: field.id, kind: field.kind, payload }),
-    onStop: (field) => send({ type: 'pcc:stopped', fieldId: field && field.id }),
+    onCapture: (field, payload) => sendToPanel({ type: 'pcc:captured', fieldId: field.id, kind: field.kind, payload }),
+    onStop: (field) => sendToPanel({ type: 'pcc:stopped', fieldId: field && field.id }),
   });
 
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (!msg || typeof msg.type !== 'string') return;
-    switch (msg.type) {
+  // Messages from the side panel.
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (!message || typeof message.type !== 'string') return;
+    switch (message.type) {
       case 'pcc:ping':
         sendResponse({ ok: true, url: location.href, selecting: selector.isActive() });
         break;
       case 'pcc:start':
-        selector.start(msg.field);
+        selector.start(message.field);
         sendResponse({ ok: true });
         break;
       case 'pcc:stop':
@@ -37,6 +39,7 @@ import { createSelector } from './selector.js';
         sendResponse({ ok: true });
         break;
       default:
+        break;
     }
   });
 })();

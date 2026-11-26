@@ -15,8 +15,7 @@ describe('content extractor', () => {
       <img id="c" src="/img/plain.jpg" title="T">`;
     expect(bestImageUrl(document.getElementById('a'))).toBe('http://localhost:3000/img/l.jpg');
     expect(bestImageUrl(document.getElementById('b'))).toBe('http://localhost:3000/img/real.jpg');
-    expect(extractImage(document.getElementById('c'))).toMatchObject({ url: 'http://localhost:3000/img/plain.jpg', alt: '', title: 'T' });
-    expect(extractImage(document.getElementById('a')).alt).toBe('Alt A');
+    expect(extractImage(document.getElementById('c'))).toEqual({ url: 'http://localhost:3000/img/plain.jpg', pageUrl: location.href });
   });
 
   it('uses a linked full-size image when a thumbnail links to it', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  readWorkbook, listSheets, readSheet, columnsFromHeaders, detectUrlColumn, createProducts, buildExportWorkbook, newColumn, bytesToBase64, base64ToBytes,
+  readWorkbook, listSheets, readSheet, columnsFromHeaders, detectUrlColumn, createProducts, buildExportWorkbook, newColumn, bytesToBase64, base64ToBytes, mergeColumns, mergeProducts, keepValidFields,
 } from '../../src/services/excelService.js';
 import { createField } from '../../src/services/fieldService.js';
 import { cleanCapturedHtml } from '../../src/services/htmlService.js';
@@ -133,5 +133,36 @@ describe('export', () => {
   });
   it('fails clearly when the worksheet is missing', () => {
     expect(() => buildExportWorkbook(bytes, { ...project, sheetName: 'Nope' }, [])).toThrow(/Nope/);
+  });
+});
+
+describe('re-importing a workbook keeps earlier work', () => {
+  const headers = [{ index: 0, name: 'SKU' }, { index: 1, name: 'URL' }, { index: 2, name: 'Name' }];
+  const rows = [
+    { rowIndex: 1, values: { 0: 'TV001', 1: 'https://example.com/a' } },
+    { rowIndex: 2, values: { 0: 'TV002', 1: 'https://example.com/b' } },
+  ];
+
+  it('keeps data, status and the custom image file name of existing rows', () => {
+    const previous = [
+      { projectId: 'p', rowIndex: 1, data: { title: 'Kept' }, status: 'completed', imageName: 'My-TV' },
+    ];
+    const [first, second] = mergeProducts('p', previous, rows, 1);
+    expect(first).toMatchObject({ rowIndex: 1, data: { title: 'Kept' }, status: 'completed', imageName: 'My-TV', url: 'https://example.com/a' });
+    expect(second).toMatchObject({ rowIndex: 2, data: {}, status: 'pending' });
+    expect(second).not.toHaveProperty('imageName');
+  });
+
+  it('keeps renamed and added columns, and unmaps fields whose column is gone', () => {
+    const added = { key: 'n_1', name: 'Brand', originalName: null, index: null };
+    const previousColumns = [
+      { key: 'c2', name: 'Product Name', originalName: 'Name', index: 2 },
+      { key: 'c5', name: 'Old', originalName: 'Old', index: 5 },
+      added,
+    ];
+    const columns = mergeColumns(previousColumns, headers);
+    expect(columns.map((column) => column.name)).toEqual(['SKU', 'URL', 'Product Name', 'Brand']);
+    const fields = keepValidFields([{ id: 'a', columnKey: 'c5' }, { id: 'b', columnKey: 'n_1' }], columns);
+    expect(fields.map((field) => field.columnKey)).toEqual([null, 'n_1']);
   });
 });

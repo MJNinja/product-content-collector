@@ -4,286 +4,277 @@
 
 A Chrome extension (Manifest V3, side panel) for collecting product information from existing websites into an Excel workbook, ready for WooCommerce or any other shop import.
 
-You import a workbook that holds product URLs. The extension opens each product in the current tab. You point at headings, paragraphs, lists and images on the page, type categories and other values, and export the same workbook with the configured columns filled in.
+You import a workbook that holds product URLs. The extension opens each product in the current tab. You point at headings, paragraphs, lists and images on the page, type categories and other values, and export the same workbook with your columns filled in.
 
-Everything runs locally. There is no server, no account and no paid API. Data is stored in the browser's IndexedDB.
+Everything runs locally: no server, no account, no paid API. Data is stored in the browser (IndexedDB).
 
 ---
 
-## 1. Install (Chrome developer mode)
+## 1. Install
 
-The ready-built extension is in **`dist/`**.
+The ready-built extension is in **`dist/`**. Requires Chrome 116 or newer.
 
 1. Open `chrome://extensions`.
 2. Turn on **Developer mode** (top right).
 3. Click **Load unpacked** and choose the `dist` folder of this project.
-4. Pin the extension (puzzle icon → pin). Clicking its toolbar icon opens the side panel.
+4. Pin the extension (puzzle icon → pin). Clicking its icon opens the side panel.
 
-Requires Chrome 116 or newer.
+After an update or rebuild, click the reload icon on the extension's card in `chrome://extensions`.
 
-After a rebuild, click the reload icon on the extension card in `chrome://extensions`.
+## 2. Quick start
 
-### Building from source
+1. **Projects** tab: create a project.
+2. **Import** tab: choose the workbook, the worksheet and the column with product URLs.
+3. **Fields** tab: check which information you collect and which column each piece goes to. Set up image naming if you export images.
+4. **Collect** tab: open each product, select content on the page, type categories, then **Complete & next**.
+5. **Export** tab: download the filled-in workbook (optionally as a ZIP with all images).
 
-```bash
-npm install
-npm run build        # outputs dist/
-```
+Everything is saved automatically, so you can close Chrome and continue later.
 
-| Command | Purpose |
-|---|---|
-| `npm run build` | Production build into `dist/` |
-| `npm test` | Unit tests (Vitest + jsdom + fake IndexedDB) |
-| `npm run test:e2e` | Build, generate sample workbooks, run the Playwright end-to-end tests with the real extension loaded |
-| `npm run fixtures` | Regenerate the sample workbooks |
-| `node tests/fixtures/server.js` | Serve the sample product pages at http://localhost:4599 for manual testing |
-
----
-
-## 2. Projects
-
-**Projects** tab:
+## 3. Projects
 
 - **Create:** enter a name (e.g. "Client A – TVs") and click *Create*.
-- **Open:** opens a project. The panel also reopens the last project automatically.
-- **Progress:** each project shows a progress bar and product counts (completed, skipped).
-- **Backup:** downloads one `.json` file containing everything: settings, fields, all product data and the original workbook.
-- **Restore backup…:** loads such a file. If the original project still exists, the backup is restored as a separate copy named "(restored)", so nothing is overwritten.
+- **Open:** the panel also reopens the last project automatically.
+- **Progress:** each project shows a progress bar and how many products are completed or skipped.
+- **Backup:** downloads one `.json` file with everything: settings, fields, product data and the original workbook.
+- **Restore backup…:** loads such a file. If the original project still exists, the backup becomes a separate copy named "(restored)"; nothing is overwritten.
 - **Delete:** asks for confirmation first.
 
-Each project has its own workbook, columns and field configuration, so different clients can use completely different templates.
+Each project has its own workbook and settings, so different clients can use completely different templates.
 
-## 3. Importing an Excel file
-
-**Import** tab:
+## 4. Importing an Excel file
 
 1. Choose an `.xlsx` file.
-2. Pick the **worksheet**. The sheet with the most rows is preselected.
-3. Pick the **Product URL column**. It is guessed from the header name ("url", "link") or from the cell contents.
-4. Check the column list, the row preview and the count of valid and invalid URLs, then click **Import N products**.
+2. Pick the **worksheet**. The one with the most rows is preselected.
+3. Pick the **Product URL column**. It is guessed from the header ("url", "link") or from the cell contents.
+4. Check the preview and the count of valid URLs, then click **Import N products**.
 
-Notes:
+- The first row is the header row. Every non-empty row below it becomes a product.
+- Rows without a valid URL are still imported; you can type their data or skip them. A `www.` address without `https://` is accepted.
+- **Importing again** replaces the workbook but keeps your work for rows that still exist (matched by row number): collected data, status, custom image file names, renamed columns and added columns.
 
-- The first row of the used range is treated as the header row. Every non-empty row below it becomes a product.
-- Rows with a missing or invalid URL are still imported. You can type data for them or skip them. A `www.` address without `https://` is accepted.
-- Importing again replaces the workbook but keeps collected data for rows that still exist (matched by row number).
+## 5. Setting up (Fields tab)
 
-## 4. Configuring columns, fields and images (Fields tab)
-
-The Fields tab has four sections: **Columns**, **Fields**, **Image settings** and **Cell formatting**. Click a section's title to collapse it to a one-line summary (for example "7 fields: SKU, Product title, …"). Click it again to expand it. **Cell formatting** starts collapsed; the others start open. The panel remembers which sections you collapsed or expanded.
-
-In **Columns** you can also change the **Product URL column** and choose the **Product identifier**: the column whose value names each product in the Collect tab's jump-to-product list (for example the SKU or product name). *Automatic* uses a SKU-like column, else a name/title column. *None* shows the URL.
+The Fields tab has four sections. Click a section's title to collapse it to a one-line summary; the panel remembers this. **Cell formatting** starts collapsed.
 
 ### Columns
 
-- Rename any column. The new name is written to the header cell on export.
-- Add new columns. They are appended after the existing ones on export.
-- Change the product URL column.
+- **Rename** a column: the new name is written to the header cell on export.
+- **Add** a column: it is added after the existing ones on export.
+- **Product URL column:** change which column holds the product links.
+- **Product identifier:** the column that names each product in the Collect tab's product list (e.g. SKU or name). *Automatic* uses a SKU-like column, otherwise a name/title column. When a product's cell is empty, its URL is shown.
 
 ### Fields
 
-A *field* is one piece of information you collect. After the first import, suggested fields are created: SKU, Product title, Main categories, Subcategories, **Product intro**, Product description, Main image and Gallery images (plus Short description if the sheet has such a column). They are matched to headers that already exist, and each one can be changed, reordered or removed.
+A *field* is one piece of information you collect. On the first import these are created for you and matched to existing columns: SKU, Product title, Main categories, Subcategories, Product intro, Product description, Main image and Gallery images (plus Short description if the sheet has that column).
 
-To add more fields:
-
-- **+ Ready-made field…** adds one of the standard fields, already set up. This is how you add, for example, *Product intro* to a project created before it existed.
-- **+ Add field** adds an empty field that you set up yourself.
-
-*Product intro* is set up the same way as *Product description*: visual selection, HTML, multiple values, joined with a new line. It goes into a column named "Intro" / "Product intro" if the sheet has one; otherwise choose a column or create one with **+ New column…**.
-
-For every field you set:
+- **+ Ready-made field…** adds one of these standard fields, already set up.
+- **+ Add field** adds an empty field to set up yourself.
 
 | Setting | Meaning |
 |---|---|
-| Name | Label shown in the Collect view |
-| Capture method | **Manual input**, **Visual selection** (click on the page) or **Existing spreadsheet data** (shows the cell and can be overridden per product) |
-| Content type | Manual: Text, Comma-separated list, HTML. Visual: Text, HTML, Image(s) |
-| Destination column | An existing column, a new one (**+ New column…**), or none |
+| Capture method | **Manual input**, **Visual selection** (click on the page) or **Existing spreadsheet data** (shows the cell; can be overridden per product) |
+| Content type | Manual: Text, Comma-separated list or HTML. Visual: Text, HTML or Image(s) |
+| Destination column | An existing column, a new one (**+ New column…**), or none (not exported) |
+| Image type | For image fields: *Main image* (`name-main`) or *Gallery* (`name-1`, `name-2` …) |
+| Clicks on the page | For HTML fields: each click a separate item, or all clicks build one list (see [Lists](#lists)) |
 | Join multiple values with | Separator between this field's own values (`\n` = new line) |
-| Multiple values | Several selections or values allowed (for example a gallery). Off = the next selection replaces the previous one |
-| Required | A product cannot be marked completed while this field is empty |
+| Multiple values | Several selections allowed. Off = a new selection replaces the old one |
+| Required | A product cannot be completed while this field is empty |
 
-### Several fields in one column (Cell formatting)
+### Image settings
 
-When several fields share a column (for example *Main categories* and *Subcategories* → `Categories`), nothing is overwritten. The values are combined in field order. For each column you choose how:
+These apply to every image field in the project. Set them up before collecting; they can be changed any time before exporting.
+
+| Setting | Effect |
+|---|---|
+| Name image files after column | Column whose value names the files (default: the SKU column). Can be changed per product in the Collect tab. |
+| New image location | For example `https://www.jacmat.cc/some-images/`. The spreadsheet then gets `https://www.jacmat.cc/some-images/<file name>` instead of the original image URL. Empty = keep the original URLs. |
+| Format | JPG, WebP, PNG, or *Keep original file* (no resizing). |
+| Quality | JPG/WebP quality, 1–100 (default 85). |
+| Max width / height | Images are scaled down to fit, never enlarged (0 = no limit). |
+| Lowercase file names | `TV001-main.jpg` → `tv001-main.jpg`. |
+| Download images as ZIP on export | When on, **Export** downloads a ZIP with the workbook and all images (see [Exporting](#8-exporting)). |
+
+The section shows example file names, and warns when two products would give different images the same name.
+
+### Cell formatting (several fields in one column)
+
+When several fields write to the same column (for example *Main categories* and *Subcategories* → `Categories`), nothing is overwritten. Values are combined in field order, in one of three ways:
 
 | Mode | Example result |
 |---|---|
-| Separated list | `Electronics, Television, Smart TVs` (with a configurable separator) |
+| Separated list | `Electronics, Television, Smart TVs` |
 | One path | `Electronics > Television > Smart TVs` |
 | Path per value of last field | `Electronics > Television > Smart TVs, Electronics > Television > 4K TVs` (WooCommerce hierarchy style) |
 
-Separators and the path separator can be changed. A live preview shows the cell value for the current product.
+Both separators can be changed, and a preview shows the result for the current product. Category relationships are never guessed: the path is built only from what you typed.
 
-Category relationships are never guessed. The path is built only from what you typed, in field order.
+## 6. Collecting (Collect tab)
 
-## 5. Collecting product information (Collect tab)
+### Moving between products
 
-- The top of the tab shows **Product N of M** with the status (*Pending / In progress / Completed / Skipped*) below it, the URL, and a dropdown to jump to any product. The dropdown names each product by the **Product identifier** column chosen in Fields → Columns (automatic: a SKU-like column, else a name/title column). When that cell is empty, the product URL is shown.
-- **Open** loads the product in the current tab. **Previous / Next** save and navigate. **Skip** marks the product as skipped and moves on.
+- The top shows **Product N of M**, its status (*Pending / In progress / Completed / Skipped*), its URL, and a list to jump to any product.
+- **Open** loads the product in the current tab. **Previous / Next** save and move. **Skip** marks the product skipped and moves on.
 - **Mark completed / Complete & next** checks required fields first.
-- If the tab shows a different page than the product URL, a warning appears. Captures still go to the current product.
+- If the tab shows a different page than the product's URL, a warning appears. What you capture still goes to the current product.
 
-### Main categories and subcategories
+### Categories and other typed values
 
-Type comma-separated values, for example `Electronics, Television, Entertainment`. Spaces are trimmed, and empty entries and duplicates are removed. The result is shown as chips; click × on a chip to remove that value. Every product has its own values, and changing one product never affects another.
+Type comma-separated values, for example `Electronics, Television, Entertainment`. Spaces, empty entries and duplicates are removed. Each value is shown as a chip; click × to remove it. Every product has its own values.
 
-### Visual selection
+### Selecting content on the page
 
 1. Click **Select on page** (or **Select image**) on a field.
-2. Move the mouse over the page. The element under the cursor is outlined, with its tag and size.
+2. Move the mouse over the page. The element under the cursor is outlined, with its tag and size. Small inline parts (bold text, links) select their whole paragraph, heading or list item.
 3. Click to capture. The click never triggers the page's links or buttons.
-   - Inline elements (span, strong, a…) select their surrounding heading, paragraph or list item. This avoids grabbing tiny fragments, and the deepest element under the cursor is used, so large parent containers are not picked by accident.
-   - **↑** selects the parent element, **↓** goes back to the child, **Enter** captures the outlined element.
-4. Keep clicking to add more (multi-value fields). Exit with **Esc**, the **Done** button on the page, or **Stop selecting** in the panel. Single-value fields stop on their own after one capture.
-5. If the page navigates or reloads while you are selecting, selection mode starts again automatically once the page has loaded.
+   - **↑** selects the surrounding element (e.g. the whole list instead of one item), **↓** goes back, **Enter** captures.
+4. Keep clicking to add more. Stop with **Esc**, the **Done** button on the page, or **Stop selecting** in the panel. Single-value fields stop after one capture.
 
-Each captured element appears in the panel, where you can:
+If the page reloads while you are selecting, selection starts again once it has loaded.
 
-- change the **output tag** (keep, remove wrapper, H1–H6, P, DIV, UL, OL, blockquote, strong, em)
-- **reorder** (↑ ↓), **edit** (✎) or **remove** (✕) it. The editor shows the final HTML that will be exported, and exactly what you type is kept. No `<div>` or other wrapper is ever added; if you type several elements (for example only `<li>` items), they are exported as they are. Choose output tag `<ul>` if you want them wrapped in a list.
+Each captured element appears in the panel. You can:
+
+- change its **output tag**: keep, remove wrapper, H1–H6, P, DIV, UL, OL, blockquote, strong, em
+- **reorder** (↑ ↓), **edit** (✎) or **remove** (✕) it. The editor shows the exact HTML that will be exported, and what you type is kept as is (no `<div>` is added)
 - **Clear** all selections of the field
-- open **HTML preview**, which shows the combined result rendered or as source
+- open the **HTML preview**, rendered or as source
 
-### Turning selections into lists (description, intro and other HTML fields)
+### Lists
 
-Three ways to get a `<ul>` (bullet) or `<ol>` (numbered) list without formatting it by hand:
+Three ways to get a `<ul>` (bullets) or `<ol>` (numbers) without formatting it by hand:
 
-1. **Clicks build one list.** Above the selections there's a **Clicks on the page** option: *Each click = separate item* (default), *Clicks build one bullet list (ul)* or *Clicks build one numbered list (ol)*. In a list mode, every element you click is added to the same list:
-   - a paragraph, heading or div becomes one `<li>`
-   - lines separated by `<br>` become one `<li>` each
-   - a list's items are taken over as they are
-   - a container (select it with ↑) has everything inside turned into list items
-
-   Starting a new selection (or changing the option) starts a new list. The option is remembered per field and can also be set in the Fields tab.
-2. **Tick and merge.** Tick the checkboxes of items you already captured, then click **Make bullet list** or **Make numbered list**. They are combined, in their current order, into one list, which takes the place of the first ticked item.
-3. **One element → list.** Set an item's output tag to `<ul>` or `<ol>`. Everything inside it is split into list items (blocks, `<br>` lines, existing list items).
+1. **Clicks build one list.** Set **Clicks on the page** to *Clicks build one bullet list* or *…numbered list*. Every element you click is added to the same list: a paragraph or heading becomes one item, lines separated by `<br>` become one item each, and an existing list's items are copied. Select a container with ↑ to turn everything inside it into items. Starting a new selection starts a new list.
+2. **Tick and merge.** Tick items you already captured and click **Make bullet list** or **Make numbered list**. They become one list, in the place of the first ticked item.
+3. **One element → list.** Set an item's output tag to `<ul>` or `<ol>`; its content is split into list items.
 
 A list can be switched between `<ul>` and `<ol>` later with the output tag.
 
 ### Images
 
-Image fields capture the image URL. Lazy-loading and responsive attributes are resolved: `srcset`, `data-srcset`, `<picture>` sources, `data-src`, `data-lazy-src`, `data-large_image` and similar. The largest real image is chosen; data-URI placeholders are ignored. If a thumbnail links to a full-size image file, the linked file is used. CSS background images can be captured too. The URL can be edited, or you can paste an image URL directly. Images are stored as URLs only and are not downloaded.
+The extension finds the real, largest image even on pages that load images lazily (`srcset`, `data-src`, `<picture>` and similar), and ignores placeholders. If a thumbnail links to a full-size file, that file is used. CSS background images work too. You can also edit the URL or paste one.
 
-### Image file names (per product)
+When the project has image fields, an **Image file name** box shows the file names for this product. Leave it empty to use the name from Image settings, or type your own:
 
-When the project has image fields, the Collect tab shows an **Image file name** box. It is empty by default, and the name comes from the column chosen in **Fields tab → Image settings** (SKU by default). Type a name to use your own for this product. The list below the box shows the resulting file names:
+- main image: `<name>-main.jpg` (a second one: `<name>-main-2.jpg`)
+- gallery images: `<name>-1.jpg`, `<name>-2.jpg` …
 
-- main image: `<name>-main.jpg` (a second main image would be `<name>-main-2.jpg`)
-- gallery images: `<name>-1.jpg`, `<name>-2.jpg`, `<name>-3.jpg` …
+### Output preview and autosave
 
-Whether an image field counts as *main* or *gallery* is set per field in the Fields tab (**Image type**).
+The bottom of the tab shows exactly what will be written to each column for this product.
 
-### Spreadsheet output preview
+Every change is saved automatically, about a third of a second after you stop typing, and immediately before moving to another product, exporting or making a backup. The top right shows *Saving… / Saved*.
 
-At the bottom of the Collect tab you can see exactly what will be written to each column for the current product.
+## 7. How captured HTML is cleaned
 
-### Autosave
+**On the page:** links and image URLs are made absolute; lazy images are resolved; buttons, forms, scripts, styles, iframes, SVGs, screen-reader-only text, hidden empty elements and tiny tracking images are removed.
 
-Every change is saved to IndexedDB automatically, about 0.35 s after you stop typing. Saving also happens immediately before navigating, when the panel is hidden, and before export or backup. The status at the top right shows *Saving… / Saved*. You can close Chrome at any time and continue later.
+**In the panel:**
+- Only basic tags are kept: headings, paragraphs, lists, bold/italic, links, tables, blockquote and images.
+- Only `href`, `src`, `alt`, `title`, `colspan` and `rowspan` attributes are kept. Classes, styles, `data-*` attributes and event handlers are removed; `javascript:` links are blocked.
+- `span` and `div` wrappers are removed; a div with only text becomes a `<p>`.
 
-## 6. HTML cleaning
+Changing a tag keeps the content and formatting inside. For example, a DIV with several paragraphs changed to P gets `<br>` line breaks instead of invalid nested blocks.
 
-Captured HTML is cleaned in two steps.
+## 8. Exporting
 
-**On the page:**
-- Links and image URLs are made absolute.
-- Lazy images are resolved.
-- Buttons, forms, scripts, styles, iframes, SVGs, screen-reader-only text and hidden empty elements are removed.
-- Tracking pixels (1×1 images) are removed.
+**Export** tab → **Export .xlsx** downloads `<original name>-export.xlsx`.
 
-**In the panel (DOMPurify):**
-- Only basic semantic tags are kept: headings, p, lists, b/strong/i/em, links, tables, blockquote, img.
-- Only `href`, `src`, `alt`, `title`, `colspan`, `rowspan` attributes are kept. All classes, inline styles, `data-*` attributes and event handlers are removed. `javascript:` links are blocked.
-- `span` and `div` wrappers are removed (a div that only holds text becomes a `<p>`).
-
-When you change a tag, child content and inline formatting are kept. For example, a DIV holding several paragraphs that is changed to P gets `<br>` line breaks instead of invalid nested blocks.
-
-## 7. Exporting
-
-**Export** tab → **Export .xlsx**. The file is downloaded as `<original name>-export.xlsx`.
-
-- The original workbook is the base, so all other worksheets, rows and columns stay as they were.
-- Configured columns are filled in. New columns are added at the end. Renamed headers are updated.
-- **Empty values never erase existing cells.** For example, SKUs and other client data in the sheet are kept.
-- *Existing spreadsheet data* fields are written only if you overrode them for a product.
-- HTML is stored as a literal text cell. Even a value starting with `=` is never turned into a formula.
+- The original workbook is the base: all other worksheets, rows and columns stay as they were.
+- Your columns are filled in, new columns are added at the end, renamed headers are updated.
+- **Empty values never erase existing cells**, so SKUs and other data already in the sheet are kept.
+- *Existing spreadsheet data* fields are only written if you changed them for a product.
+- HTML is stored as plain text. A value starting with `=` never becomes a formula.
 - Optional: **Only write data of completed products**.
 
-### Images: new location, resizing, format and ZIP download
+With **Download images as ZIP** switched on (Fields → Image settings), the button becomes **Export .zip**. The ZIP contains:
 
-Image settings are in **Fields tab → Image settings**, so they can be set up before you start collecting. They are saved with the project and can be changed at any time before exporting. The Export tab shows a one-line summary of these settings and a **Change image settings** link.
+- `<workbook>-export.xlsx`: the workbook, with the new image URLs
+- `images/`: every image, downloaded from the original site, resized and converted
+- `image-report.csv`: one line per image with its row, file name, new and original URL, status, any error, and sizes
 
-| Setting | Effect |
-|---|---|
-| Name image files after column | Column whose value names the files (default: the SKU column). The file name can be changed per product in the Collect tab. Unsafe characters become `-`. |
-| New image location | For example `https://www.jacmat.cc/some-images/`. When set, the spreadsheet gets `https://www.jacmat.cc/some-images/<file name>` instead of the original image URL. Empty = keep the original URLs. |
-| Format | JPG, WebP, PNG, or *Keep original file* (downloaded as-is, no resizing). |
-| Quality | JPG/WebP quality, 1–100 (default 85). |
-| Max width / height | Images are scaled down to fit, keeping their proportions, and never made larger (0 = no limit). |
-| Lowercase file names | `TV001-main.jpg` → `tv001-main.jpg`. |
-| Download images as ZIP on export | Optional. When on, **Export** downloads one ZIP file instead of the .xlsx. |
+Example: `https://www.denon.com/…/AVR-X2800H_front.png?sw=3000` on the row with SKU `AVR-X2800H`, with location `https://www.jacmat.cc/some-images/`, JPG and max 1200 px, becomes `images/AVR-X2800H-main.jpg` in the ZIP and `https://www.jacmat.cc/some-images/AVR-X2800H-main.jpg` in the spreadsheet.
 
-The ZIP contains:
-
-- `<workbook>-export.xlsx`: the workbook, with the new image URLs.
-- `images/`: every image, downloaded from the original site, then resized and converted.
-- `image-report.csv`: one line per image with row, file name, new URL, original URL, status, error, size in pixels, and original and new file size.
-
-Example: the original image `https://www.denon.com/…/AVR-X2800H_front.png?sw=3000` on the row with SKU `AVR-X2800H`, with location `https://www.jacmat.cc/some-images/`, JPG and max 1200 px, becomes `images/AVR-X2800H-main.jpg` in the ZIP, and `https://www.jacmat.cc/some-images/AVR-X2800H-main.jpg` in the spreadsheet.
-
-Notes:
-
-- Images that cannot be downloaded are listed in the Export tab and in the report. Their new URL is still written to the spreadsheet, so you can add the file yourself.
+- Images that cannot be downloaded are listed in the Export tab and the report. Their new URL is still written, so you can add the file yourself.
 - Transparent areas become white in JPG files.
-- If two products would produce the same file name for different pictures, Image settings warns you, and the later file gets `-row<N>` added (in both the ZIP and the spreadsheet). The same picture used twice keeps one file.
-- Images are downloaded 4 at a time; the export button shows the progress.
+- If two products would give different images the same file name, the later one gets `-row<N>` added. The same image used twice keeps one file.
+
+## 9. Known limitations
+
+- **Excel formatting:** values, formulas, sheets, merged cells and column widths are kept. Some rich formatting (fonts, colours, conditional formatting), charts, images, comments and data validation may be lost or simplified. Keep the original file. `.xls` / `.xlsm` can be read but are exported as `.xlsx`.
+- **Rows are matched by row number.** Do not insert or delete rows in the source workbook mid-project; re-import if you must.
+- The header row is always the first used row of the worksheet.
+- Excel cells hold at most 32,767 characters. The panel warns when a value is longer.
+- Content inside **iframes** and **closed shadow DOM** cannot be selected.
+- Chrome does not allow extensions on `chrome://` pages or the Chrome Web Store. For `file://` pages, enable "Allow access to file URLs" on the extension.
+- Hidden elements are removed only when they contain no text, so collapsed tab or accordion content you select on purpose is kept.
+- Some sites block image downloads (hotlink protection, login); those images show up as failures in the report. Very large exports are built in memory and can take a while.
+- Animated GIFs become a still image when converted. Use *Keep original file* to keep the animation.
+- If the side panel is closed during selection, selection stays active on the page until you press Esc or click Done.
+- Opening the real side panel from the toolbar cannot be tested automatically; check once by hand that it opens and stays open while you navigate.
 
 ---
 
-## 8. Project structure
+## 10. For developers
 
-```
-manifest.json               MV3 manifest (copied into dist/)
-index.html                  side panel page
-vite.config.js              side panel build (+ test config)
-vite.content.config.js      content script → single IIFE file dist/content.js
-vite.worker.config.js       service worker → dist/service-worker.js
-src/background/service-worker.js   opens the side panel on toolbar click
-src/content/content.js      message handling, injected on demand only
-src/content/selector.js     hover highlight, click capture, keyboard navigation
-src/content/extractor.js    element/image extraction, lazy image resolution
-src/services/excelService.js       SheetJS import / export
-src/services/storageService.js     IndexedDB projects, products, workbooks, backups
-src/services/htmlService.js        DOMPurify cleaning, tag changes, combining
-src/services/fieldService.js       field values, category parsing, column combination, image file naming
-src/services/imageService.js       image download, resize/convert (canvas), ZIP writer, image report
-src/services/navigationService.js  tab navigation, content script injection
-src/sidepanel/                     React UI (App + components + styles)
-tests/unit/                 Vitest unit tests
-tests/e2e/                  Playwright tests (real extension, local fixture site)
-tests/fixtures/             sample product pages, fixture server, workbook generator
-samples/                    sample workbooks (URLs point to the fixture server)
-scripts/make-icons.js       generates the PNG icons
+### Commands
+
+```bash
+npm install
+npm run build        # builds the extension into dist/
 ```
 
-The content script is **not** registered for every website. It is injected only into the active tab when you start a selection, so normal browsing is unaffected.
+| Command | Purpose |
+|---|---|
+| `npm run build` | Build into `dist/` |
+| `npm test` | Unit tests (Vitest, jsdom, fake IndexedDB) |
+| `npm run test:e2e` | Build, generate sample files, and run the Playwright tests with the real extension loaded |
+| `npm run fixtures` | Regenerate the sample workbooks and images |
+| `node tests/fixtures/server.js` | Serve the sample product pages at http://localhost:4599 for manual testing |
 
-## 9. Tests performed
+### How it fits together
 
-- **Unit tests:** `npm test` — 88 tests covering Excel import/export, field and category configuration, HTML sanitisation, IndexedDB storage (including backup/restore), lazy-image extraction, and image file naming, resizing and ZIP packaging.
-- **End-to-end tests:** `npm run test:e2e` — 6 Playwright tests, run against the real unpacked extension with a local fixture shop, covering the full collect → configure → export workflow, list-building from selections, and image export (resize, convert, ZIP).
+There are three parts, which talk to each other with Chrome messages:
 
-## 10. Known limitations and items to verify manually
+- **Side panel** (`src/sidepanel/`): the React interface. `App.jsx` holds the state and actions; each tab is a component in `components/`.
+- **Content script** (`src/content/`): injected into the product page only while you select, so normal browsing is never affected. It highlights elements, blocks clicks and sends the captured HTML or image URL to the panel.
+- **Services** (`src/services/`): plain functions without UI, used by the panel.
 
-- **Opening the real side panel** (clicking the toolbar icon) cannot be automated with Playwright. The tests run the identical panel page in a tab and check that the panel behaviour and path are configured. Please check once by hand that the panel opens and stays open while you navigate.
-- **Excel preservation** depends on SheetJS Community Edition. Cell values, formulas, sheets, merged cells and column widths are kept. Some rich formatting (fonts, colours, conditional formatting), charts, images, comments and data validation in the original workbook may be lost or simplified on export. Keep the original file. `.xls` / `.xlsm` can be read but are always exported as `.xlsx`.
-- The header row is always the first row of the used range of the worksheet.
-- Excel cells hold at most 32,767 characters. The panel warns when a combined value exceeds this.
-- Content inside **iframes** and **closed shadow DOM** cannot be selected. Elements in open shadow roots are reached through the event path.
-- Chrome blocks extensions on `chrome://` pages and the Chrome Web Store. `file://` pages need "Allow access to file URLs" enabled on the extension.
-- Hidden elements are removed only when they contain no text, so that collapsed tab or accordion content you select on purpose is not lost.
-- Product data is matched to spreadsheet rows by row number. Do not insert or delete rows in the source workbook mid-project; re-import if you must.
-- Image download fetches each image once per export; sites that block automated image requests (hotlink protection, login) show up as failures in the report. Very large exports (thousands of images) are built in memory, which can take a while.
-- Animated GIFs become a single still frame when converted. Use *Keep original file* if you need the animation.
-- If the side panel is closed while you are in selection mode, selection mode stays active on the page until you press Esc or click Done.
+```
+manifest.json                       MV3 manifest (copied into dist/)
+index.html                          side panel page
+vite.config.js                      side panel build (+ test config)
+vite.content.config.js              content script → dist/content.js
+vite.worker.config.js               service worker → dist/service-worker.js
+
+src/background/service-worker.js    opens the side panel on toolbar click
+src/content/content.js              message handling
+src/content/selector.js             hover highlight, click blocking, keyboard navigation
+src/content/extractor.js            element and image extraction, lazy image resolution
+
+src/services/excelService.js        reading the workbook, re-import merging, export
+src/services/storageService.js      IndexedDB: projects, products, workbooks, backups
+src/services/htmlService.js         HTML cleaning (DOMPurify), tag changes, lists
+src/services/fieldService.js        field values, column combining, image file names
+src/services/imageService.js        image download, resize/convert, ZIP writer, report
+src/services/navigationService.js   tab navigation, content script injection
+
+src/sidepanel/App.jsx               state, autosave, capture handling, navigation
+src/sidepanel/components/           one file per tab, plus:
+  FieldCard.jsx                     settings of one field (Fields tab)
+  CellFormatting.jsx                Cell formatting section (Fields tab)
+  ImageSettings.jsx                 Image settings section (Fields tab)
+  FieldEditors.jsx                  field editors in the Collect tab
+  common.jsx                        shared small components and helpers
+
+tests/unit/                         Vitest unit tests
+tests/e2e/                          Playwright tests (real extension, local fixture site)
+tests/fixtures/                     sample product pages, fixture server, file generators
+samples/                            sample workbooks (URLs point to the fixture server)
+scripts/make-icons.js               generates the PNG icons
+```
+
+### Tests
+
+- **Unit tests** (`npm test`, 90 tests): Excel import, re-import and export, fields and category formatting, HTML cleaning and lists, IndexedDB storage and backups, image extraction, file naming, resizing and the ZIP writer.
+- **End-to-end tests** (`npm run test:e2e`, 6 tests): run the real extension against a local test shop and cover the whole workflow (import → configure → collect → export → backup/restore), lists, and image export (resize, convert, ZIP).

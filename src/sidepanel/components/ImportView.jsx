@@ -1,42 +1,8 @@
 import { useMemo, useState } from 'react';
 import * as storage from '../../services/storageService.js';
-import { readWorkbook, listSheets, readSheet, columnsFromHeaders, detectUrlColumn, createProducts } from '../../services/excelService.js';
+import { readWorkbook, listSheets, readSheet, detectUrlColumn, mergeColumns, mergeProducts, keepValidFields } from '../../services/excelService.js';
 import { suggestFields } from '../../services/fieldService.js';
 import { normalizeProductUrl } from '../../utils/url.js';
-
-/*
- * Re-importing a workbook must not lose work. These helpers carry over what
- * the user already did for the previous import.
- */
-
-/** Columns of the new sheet, keeping names the user changed and columns the user added. */
-function mergeColumns(previousColumns, headers) {
-  const columns = columnsFromHeaders(headers).map((column) => {
-    const previous = previousColumns.find(
-      (candidate) => candidate.key === column.key && candidate.originalName === column.originalName,
-    );
-    return previous ? { ...column, name: previous.name } : column;
-  });
-  for (const previous of previousColumns) {
-    if (previous.index == null) columns.push(previous); // a new column the user added
-  }
-  return columns;
-}
-
-/** Products of the new sheet, keeping collected data and status for rows that existed before (matched by row number). */
-function mergeProducts(projectId, previousProducts, rows, urlColumnIndex) {
-  const previousByRow = new Map(previousProducts.map((product) => [product.rowIndex, product]));
-  return createProducts(projectId, rows, urlColumnIndex).map((product) => {
-    const previous = previousByRow.get(product.rowIndex);
-    return previous ? { ...product, data: previous.data, status: previous.status } : product;
-  });
-}
-
-/** Fields stay as they were; a field whose column no longer exists is unmapped. */
-function keepValidFields(fields, columns) {
-  const columnKeys = new Set(columns.map((column) => column.key));
-  return fields.map((field) => ({ ...field, columnKey: columnKeys.has(field.columnKey) ? field.columnKey : null }));
-}
 
 /** Import tab: choose a workbook, worksheet and URL column, then import. */
 export default function ImportView({ ctx }) {

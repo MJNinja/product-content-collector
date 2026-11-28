@@ -225,6 +225,50 @@ export function fieldValues(project, field, product, imagePlan) {
   return { values: nonEmptyStrings([text]), writes: true };
 }
 
+// ---------------------------------------------------------------------------
+// Copying collected data from one product to another (similar variants)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fields whose data can be copied between products: manual input and visual
+ * selection. "Existing spreadsheet data" fields always stay with their own row.
+ */
+export function copyableFields(project, { includeImages = false } = {}) {
+  return (project.fields || []).filter((field) => {
+    if (field.method === 'source') return false;
+    if (field.kind === 'image' && !includeImages) return false;
+    return true;
+  });
+}
+
+/** A copy of one field's value. Selections and images get new ids, so the two products never share items. */
+function copyFieldValue(field, value) {
+  if (!Array.isArray(value)) return value; // text, typed list or manual HTML
+  const idPrefix = field.kind === 'image' ? 'i_' : 's_';
+  return value.map((item) => ({ ...item, id: uid(idPrefix) }));
+}
+
+/**
+ * The data of `toProduct` after copying the copyable fields from `fromProduct`.
+ * Copied fields replace what was there (also when they are empty in
+ * `fromProduct`); all other fields keep their value. The custom image file
+ * name and the status are not part of `data`, so they are never copied.
+ */
+export function copyProductData(project, fromProduct, toProduct, options = {}) {
+  const fromData = fromProduct.data || {};
+  const result = { ...(toProduct.data || {}) };
+  for (const field of copyableFields(project, options)) {
+    if (fromData[field.id] === undefined) delete result[field.id];
+    else result[field.id] = copyFieldValue(field, fromData[field.id]);
+  }
+  return result;
+}
+
+/** True when the product has a value in any field that copying would replace. */
+export function hasCopyableData(project, product, options = {}) {
+  return copyableFields(project, options).some((field) => fieldValues(project, field, product).values.length > 0);
+}
+
 /**
  * Combines the values of all fields that write to one column into the cell text.
  * Example with Main categories = [Electronics, Television] and

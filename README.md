@@ -119,6 +119,18 @@ Both separators can be changed, and a preview shows the result for the current p
 - **Mark completed / Complete & next** checks required fields first.
 - If the tab shows a different page than the product's URL, a warning appears. What you capture still goes to the current product.
 
+### Copying from a similar product
+
+For variants that are almost the same (another colour, small text differences), open the **Copy from a completed product** section below the product navigation. It is collapsed by default; click its title to open it.
+
+1. Choose a completed product. The list shows the same names as the product list.
+2. Tick **Include images** if the photos are the same too.
+3. Click **Copy**, then change only what differs.
+
+- Manual and visual-selection fields are copied. Fields set to *Existing spreadsheet data* (e.g. SKU) keep this product's own value, and the image file name is not copied.
+- Copied fields replace what the current product had. If it already has data in those fields, you are asked to confirm first.
+- The copy is independent: changing it never affects the product you copied from.
+
 ### Categories and other typed values
 
 Type comma-separated values, for example `Electronics, Television, Entertainment`. Spaces, empty entries and duplicates are removed. Each value is shown as a chip; click × to remove it. Every product has its own values.
@@ -276,5 +288,5 @@ scripts/make-icons.js               generates the PNG icons
 
 ### Tests
 
-- **Unit tests** (`npm test`, 90 tests): Excel import, re-import and export, fields and category formatting, HTML cleaning and lists, IndexedDB storage and backups, image extraction, file naming, resizing and the ZIP writer.
-- **End-to-end tests** (`npm run test:e2e`, 6 tests): run the real extension against a local test shop and cover the whole workflow (import → configure → collect → export → backup/restore), lists, and image export (resize, convert, ZIP).
+- **Unit tests** (`npm test`, 94 tests): Excel import, re-import and export, fields and category formatting, copying between products, HTML cleaning and lists, IndexedDB storage and backups, image extraction, file naming, resizing and the ZIP writer.
+- **End-to-end tests** (`npm run test:e2e`, 7 tests): run the real extension against a local test shop and cover the whole workflow (import → configure → collect → export → backup/restore), lists, copying from a completed product, and image export (resize, convert, ZIP).

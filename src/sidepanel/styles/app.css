@@ -220,3 +220,7 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-si
 .capture-mode select { width: auto; flex: 1; font-size: 12px; padding: 2px 6px; }
 .list-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: var(--accent-soft); border-radius: 6px; padding: 5px 8px; }
 .sel-check { margin: 0 2px 0 0; }
+
+/* Collect tab: copy from a completed product */
+.copy-from { align-items: center; gap: 8px; }
+.copy-from select { flex: 1 1 160px; min-width: 0; width: auto; }

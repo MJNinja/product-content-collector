@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseList, computeRow, fieldValues, missingRequired, createField, suggestFields, decodeSeparator, createPresetField, PRESET_LABELS, labelColumn, productLabel } from '../../src/services/fieldService.js';
+import { parseList, computeRow, fieldValues, missingRequired, createField, suggestFields, decodeSeparator, createPresetField, PRESET_LABELS, labelColumn, productLabel, copyableFields, copyProductData, hasCopyableData } from '../../src/services/fieldService.js';
 import { cleanCapturedHtml } from '../../src/services/htmlService.js';
 
 function project(fields, columnFormats = {}) {
@@ -194,5 +194,60 @@ describe('product identifier (Collect tab list)', () => {
   });
   it('a column that no longer exists falls back to automatic', () => {
     expect(labelColumn(proj('c9')).key).toBe('c3');
+  });
+});
+
+describe('copying data from a completed product', () => {
+  const fields = [
+    createField({ id: 'sku', method: 'source', kind: 'text', columnKey: 'c0' }),
+    createField({ id: 'title', method: 'visual', kind: 'text', columnKey: 'c1' }),
+    createField({ id: 'cats', method: 'manual', kind: 'list', columnKey: 'c2' }),
+    createField({ id: 'desc', method: 'visual', kind: 'html', columnKey: 'c3' }),
+    createField({ id: 'img', method: 'visual', kind: 'image', columnKey: 'c4' }),
+  ];
+  const proj = { columns: [{ key: 'c0', name: 'SKU', index: 0 }], urlColumnKey: null, fields };
+  const from = {
+    rowIndex: 1,
+    status: 'completed',
+    imageName: 'Red-TV',
+    source: { 0: 'TV-RED' },
+    data: {
+      title: [{ id: 's1', html: '<h1>TV</h1>', text: 'TV' }],
+      cats: 'Electronics, TVs',
+      desc: [{ id: 's2', html: '<p>Great</p>', text: 'Great', sourceTag: 'p', outputTag: 'keep' }],
+      img: [{ id: 'i1', url: 'https://x.test/red.jpg' }],
+    },
+  };
+  const to = { rowIndex: 2, status: 'pending', source: { 0: 'TV-BLUE' }, data: { sku: 'TV-BLUE-OVERRIDE', img: [{ id: 'i9', url: 'https://x.test/blue.jpg' }] } };
+
+  it('copies manual and visual fields, never spreadsheet fields', () => {
+    expect(copyableFields(proj).map((field) => field.id)).toEqual(['title', 'cats', 'desc']);
+    expect(copyableFields(proj, { includeImages: true }).map((field) => field.id)).toEqual(['title', 'cats', 'desc', 'img']);
+    const data = copyProductData(proj, from, to);
+    expect(data.sku).toBe('TV-BLUE-OVERRIDE'); // source override stays
+    expect(data.cats).toBe('Electronics, TVs');
+    expect(data.title[0]).toMatchObject({ html: '<h1>TV</h1>', text: 'TV' });
+    expect(data.desc[0]).toMatchObject({ html: '<p>Great</p>', outputTag: 'keep' });
+    expect(data.img).toEqual([{ id: 'i9', url: 'https://x.test/blue.jpg' }]); // images left alone
+  });
+
+  it('copies images only when asked, with new ids', () => {
+    const data = copyProductData(proj, from, to, { includeImages: true });
+    expect(data.img).toHaveLength(1);
+    expect(data.img[0].url).toBe('https://x.test/red.jpg');
+    expect(data.img[0].id).not.toBe('i1');
+    expect(data.title[0].id).not.toBe('s1');
+  });
+
+  it('replaces: a field empty in the source product becomes empty', () => {
+    const data = copyProductData(proj, { data: { title: from.data.title } }, { data: { cats: 'Old' } });
+    expect(data).not.toHaveProperty('cats');
+    expect(data.title).toHaveLength(1);
+  });
+
+  it('knows whether the current product has data that would be replaced', () => {
+    expect(hasCopyableData(proj, to)).toBe(false); // only a source override and an image
+    expect(hasCopyableData(proj, to, { includeImages: true })).toBe(true);
+    expect(hasCopyableData(proj, from)).toBe(true);
   });
 });

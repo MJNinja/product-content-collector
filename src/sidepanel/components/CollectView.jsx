@@ -3,6 +3,7 @@ import { computeRow, productLabel, missingRequired, columnName, oversizedCells, 
 import { sameDocument } from '../../utils/url.js';
 import { StatusBadge, STATUS_LABELS, countStatuses, ProgressBar } from './common.jsx';
 import { FieldEditor } from './FieldEditors.jsx';
+import CopyFromProduct from './CopyFromProduct.jsx';
 
 const PREVIEW_MAX_CHARACTERS = 600;
 
@@ -69,7 +70,7 @@ function ImageFiles({ project, product, onChange }) {
 export default function CollectView({ ctx }) {
   const {
     project, products, currentIndex, tab, selecting,
-    updateField, setFieldData, toggleSelect, goTo, openInTab, completeCurrent, updateProduct, setView,
+    updateField, setFieldData, toggleSelect, goTo, openInTab, completeCurrent, updateProduct, setView, notify,
   } = ctx;
   const [showPreview, setShowPreview] = useState(true);
   const counts = useMemo(() => countStatuses(products), [products]);
@@ -146,6 +147,14 @@ export default function CollectView({ ctx }) {
           <button className="btn" disabled={isLastProduct} onClick={() => goTo(currentIndex + 1)} data-testid="next">Next →</button>
         </div>
       </section>
+
+      <CopyFromProduct
+        project={project}
+        products={products}
+        currentIndex={currentIndex}
+        updateProduct={updateProduct}
+        notify={notify}
+      />
 
       <section className="card">
         {project.fields.length === 0 && (
